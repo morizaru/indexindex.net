@@ -1,0 +1,4 @@
+AuthType Basic
+AuthName "INDEXINDEX Admin"
+AuthUserFile /home/r1225606/public_html/morizaru.net/indexindex/admin/.htpasswd
+Require valid-user

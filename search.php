@@ -1,0 +1,580 @@
+<?php
+// search.php
+
+header('Content-Type: text/html; charset=UTF-8');
+
+require_once __DIR__ . '/app/config.php';
+
+require_once __DIR__ . '/includes/access_logger.php';
+ii_access_log('検索');
+
+function h($value) {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+function selected_attr($value, $current) {
+    return $value === $current ? ' checked' : '';
+}
+
+$q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+$target = isset($_GET['target']) ? trim((string)$_GET['target']) : 'magazine';
+
+$allowed_targets = ['magazine', 'work', 'creator'];
+if (!in_array($target, $allowed_targets, true)) {
+    $target = 'magazine';
+}
+
+$results = [];
+$limit = 500;
+
+$target_labels = [
+    'magazine' => '雑誌名',
+    'work' => '作品名',
+    'creator' => '作者名',
+];
+
+if ($q !== '') {
+    $keyword = '%' . $q . '%';
+
+    if ($target === 'magazine') {
+        $sql = "
+            SELECT
+                m.id AS magazine_id,
+                m.name AS magazine_name,
+                p.name AS publisher_name,
+                COUNT(DISTINCT mi.id) AS issue_count,
+                MIN(mi.issue_year) AS first_year,
+                MAX(mi.issue_year) AS last_year
+            FROM magazines m
+            LEFT JOIN publishers p
+                ON p.id = m.publisher_id
+            LEFT JOIN magazine_issues mi
+                ON mi.magazine_id = m.id
+               AND mi.status = 'approved'
+            WHERE m.name LIKE :keyword
+            GROUP BY
+                m.id,
+                m.name,
+                p.name
+            ORDER BY
+                m.name ASC,
+                p.name ASC
+            LIMIT {$limit}
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':keyword' => $keyword]);
+        $results = $stmt->fetchAll();
+    }
+
+    if ($target === 'work') {
+        $sql = "
+            SELECT
+                w.id AS work_id,
+                w.title AS work_title,
+                w.title_sub AS work_title_sub,
+                w.publication_type,
+                COUNT(DISTINCT ic.id) AS content_count,
+                MIN(mi.issue_year) AS first_year,
+                MAX(mi.issue_year) AS last_year
+            FROM works w
+            LEFT JOIN issue_contents ic
+                ON ic.work_id = w.id
+            LEFT JOIN magazine_issues mi
+                ON mi.id = ic.issue_id
+               AND mi.status = 'approved'
+            WHERE w.title LIKE :keyword
+               OR w.title_sub LIKE :keyword
+            GROUP BY
+                w.id,
+                w.title,
+                w.title_sub,
+                w.publication_type
+            ORDER BY
+                w.title ASC,
+                w.title_sub ASC,
+                w.id ASC
+            LIMIT {$limit}
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':keyword' => $keyword]);
+        $results = $stmt->fetchAll();
+    }
+
+    if ($target === 'creator') {
+        $sql = "
+            SELECT
+                c.id AS creator_id,
+                c.name AS creator_name,
+                COUNT(DISTINCT cc.content_id) AS content_count,
+                COUNT(DISTINCT ic.work_id) AS work_count,
+                MIN(mi.issue_year) AS first_year,
+                MAX(mi.issue_year) AS last_year
+            FROM creators c
+            LEFT JOIN content_creators cc
+                ON cc.creator_id = c.id
+            LEFT JOIN issue_contents ic
+                ON ic.id = cc.content_id
+            LEFT JOIN magazine_issues mi
+                ON mi.id = ic.issue_id
+               AND mi.status = 'approved'
+            WHERE c.name LIKE :keyword
+            GROUP BY
+                c.id,
+                c.name
+            ORDER BY
+                c.name ASC,
+                c.id ASC
+            LIMIT {$limit}
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':keyword' => $keyword]);
+        $results = $stmt->fetchAll();
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>詳細検索 - INDEXINDEX</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 24px;
+            background: #f5f5f5;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 24px;
+            border-radius: 8px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 28px;
+        }
+
+        .nav {
+            margin-bottom: 20px;
+        }
+
+        .nav a {
+            margin-right: 12px;
+            color: #0066cc;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        .search-form {
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 10px 18px;
+            font-size: 16px;
+            border: 1px solid #333;
+            background: #333;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #111;
+        }
+
+        .radio-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            font-size: 15px;
+        }
+
+        .radio-row label {
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .count {
+            margin-bottom: 16px;
+            color: #666;
+        }
+
+        .notice {
+            color: #666;
+            margin: 12px 0;
+        }
+
+        .description-box {
+            margin: 0 0 18px;
+            padding: 14px 16px;
+            background: #fafafa;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            color: #444;
+            line-height: 1.8;
+        }
+
+        .description-box p {
+            margin: 0 0 8px;
+        }
+
+        .description-box p:last-child {
+            margin-bottom: 0;
+        }
+
+        .example-box {
+            margin: 14px 0 0;
+            padding: 14px 16px;
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            color: #444;
+            line-height: 1.7;
+        }
+
+        .example-box h2 {
+            margin: 0 0 8px;
+            font-size: 18px;
+        }
+
+        .example-list {
+            margin: 0;
+            padding-left: 1.4em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            vertical-align: top;
+        }
+
+        th {
+            background: #eee;
+            text-align: left;
+        }
+
+        a {
+            color: #0066cc;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .main-name {
+            font-weight: bold;
+        }
+
+        .sub-name {
+            color: #666;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .small {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .actions a {
+            display: inline-block;
+            margin-right: 10px;
+            font-size: 13px;
+        }
+
+        .footer {
+            margin-top: 28px;
+            text-align: center;
+            color: #888;
+            font-size: 13px;
+        }
+
+        .footer a {
+            color: #666;
+            text-decoration: none;
+            margin: 0 6px;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 700px) {
+            body {
+                margin: 8px;
+            }
+
+            .container {
+                padding: 12px;
+            }
+
+            .search-box {
+                display: block;
+            }
+
+            input[type="text"] {
+                width: 100%;
+                box-sizing: border-box;
+                margin-bottom: 8px;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .radio-row {
+                gap: 10px;
+            }
+
+            table, thead, tbody, tr, th, td {
+                display: block;
+            }
+
+            thead {
+                display: none;
+            }
+
+            tr {
+                border: 1px solid #ddd;
+                margin-bottom: 12px;
+                padding: 8px;
+            }
+
+            td {
+                border: none;
+                padding: 4px 0;
+            }
+
+            td::before {
+                font-weight: bold;
+                display: inline-block;
+                width: 90px;
+                color: #555;
+            }
+
+            td.name-cell::before { content: "名称"; }
+            td.publisher-cell::before { content: "出版社"; }
+            td.count-cell::before { content: "件数"; }
+            td.year-cell::before { content: "収録年"; }
+            td.type-cell::before { content: "区分"; }
+            td.actions::before { content: "リンク"; }
+        }
+    </style>
+
+    <?php include __DIR__ . '/includes/adsense_head.php'; ?>
+
+    <link rel="stylesheet" href="assets/css/common.css">
+    
+</head>
+<body>
+
+<?php
+$current_page = 'search';
+require_once __DIR__ . '/includes/header.php';
+?>
+
+<div class="container">
+
+    <h1>詳細検索</h1>
+
+    <div class="description-box">
+        <p>登録済みの漫画雑誌目次を、作品名、作者名、雑誌名から検索できます。該当する雑誌号や掲載データへの手がかりを探すためのページです。</p>
+        <p>入力例：週刊少年サンデー、ドラえもん、藤子不二雄 など</p>
+    </div>
+
+    <form method="get" action="search.php" class="search-form">
+        <div class="search-box">
+            <input type="text" name="q" value="<?= h($q) ?>" placeholder="検索キーワードを入力">
+            <button type="submit">検索</button>
+        </div>
+
+        <div class="radio-row">
+            <label><input type="radio" name="target" value="magazine"<?= selected_attr('magazine', $target) ?>> 雑誌名</label>
+            <label><input type="radio" name="target" value="work"<?= selected_attr('work', $target) ?>> 作品名</label>
+            <label><input type="radio" name="target" value="creator"<?= selected_attr('creator', $target) ?>> 作者名</label>
+        </div>
+    </form>
+
+    <?php if ($q === ''): ?>
+
+        <p class="notice">検索キーワードを入力し、検索対象を選んでください。作品名、作者名、雑誌名の一部だけでも検索できます。</p>
+        <div class="example-box">
+            <h2>検索例</h2>
+            <ul class="example-list">
+                <li>雑誌名で探す：週刊少年サンデー、COM、少年ジャンプ など</li>
+                <li>作品名で探す：ドラえもん、あしたのジョー など</li>
+                <li>作者名で探す：藤子不二雄、ちばてつや など</li>
+            </ul>
+        </div>
+
+    <?php else: ?>
+
+        <div class="count">
+            「<?= h($q) ?>」の<?= h($target_labels[$target]) ?>検索結果：<?= count($results) ?>件
+            <?php if (count($results) >= $limit): ?>
+                <span class="small">※最大<?= h($limit) ?>件まで表示しています。</span>
+            <?php endif; ?>
+        </div>
+
+        <?php if (empty($results)): ?>
+
+            <p class="notice">該当するデータは見つかりませんでした。表記を変える、検索対象を切り替える、キーワードを短くするなどして再検索してください。雑誌名・作品名・作者名のどれを探しているかに合わせて、検索対象のラジオボタンを変更できます。</p>
+
+        <?php elseif ($target === 'magazine'): ?>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>雑誌名</th>
+                        <th>出版社</th>
+                        <th>雑誌号数</th>
+                        <th>収録年</th>
+                        <th>リンク</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($results as $row): ?>
+                    <tr>
+                        <td class="name-cell">
+                            <div class="main-name"><?= h($row['magazine_name']) ?></div>
+                        </td>
+                        <td class="publisher-cell"><?= h($row['publisher_name'] ?? '') ?></td>
+                        <td class="count-cell"><?= h($row['issue_count']) ?>件</td>
+                        <td class="year-cell">
+                            <?php if (!empty($row['first_year']) && !empty($row['last_year'])): ?>
+                                <?= h($row['first_year']) ?>〜<?= h($row['last_year']) ?>年
+                            <?php else: ?>
+                                -
+                            <?php endif; ?>
+                        </td>
+                        <td class="actions">
+                            <a href="issues.php?magazine_id=<?= h($row['magazine_id']) ?>">雑誌号を見る</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+
+        <?php elseif ($target === 'work'): ?>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>作品名</th>
+                        <th>区分</th>
+                        <th>登録件数</th>
+                        <th>収録年</th>
+                        <th>リンク</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($results as $row): ?>
+                    <tr>
+                        <td class="name-cell">
+                            <div class="main-name"><?= h($row['work_title']) ?></div>
+                            <?php if (!empty($row['work_title_sub'])): ?>
+                                <div class="sub-name"><?= h($row['work_title_sub']) ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td class="type-cell"><?= h($row['publication_type'] ?? '') ?></td>
+                        <td class="count-cell"><?= h($row['content_count']) ?>件</td>
+                        <td class="year-cell">
+                            <?php if (!empty($row['first_year']) && !empty($row['last_year'])): ?>
+                                <?= h($row['first_year']) ?>〜<?= h($row['last_year']) ?>年
+                            <?php else: ?>
+                                -
+                            <?php endif; ?>
+                        </td>
+                        <td class="actions">
+                            <a href="works.php?q=<?= urlencode($row['work_title']) ?>">作品一覧で見る</a>
+                            <a href="work_graph.php?work_id=<?= h($row['work_id']) ?>">グラフ</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+
+        <?php elseif ($target === 'creator'): ?>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>作者名</th>
+                        <th>作品数</th>
+                        <th>目次件数</th>
+                        <th>収録年</th>
+                        <th>リンク</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($results as $row): ?>
+                    <tr>
+                        <td class="name-cell">
+                            <div class="main-name"><?= h($row['creator_name']) ?></div>
+                        </td>
+                        <td class="count-cell"><?= h($row['work_count']) ?>件</td>
+                        <td class="count-cell"><?= h($row['content_count']) ?>件</td>
+                        <td class="year-cell">
+                            <?php if (!empty($row['first_year']) && !empty($row['last_year'])): ?>
+                                <?= h($row['first_year']) ?>〜<?= h($row['last_year']) ?>年
+                            <?php else: ?>
+                                -
+                            <?php endif; ?>
+                        </td>
+                        <td class="actions">
+                            <a href="creators.php?q=<?= urlencode($row['creator_name']) ?>">人物一覧で見る</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+
+        <?php endif; ?>
+
+    <?php endif; ?>
+
+</div>
+
+<?php require_once __DIR__ . '/includes/footer.php'; ?>
+
+</body>
+</html>

@@ -1,0 +1,14 @@
+/* common.css
+   INDEXINDEX 共通スタイル
+   置き場所例: assets/css/common.css
+*/
+
+/*
+   TypeSquare Webフォント G2サンセリフ-B / GSanSerif-B を使う前提です。
+   TypeSquareのscriptは、各ページまたは共通headerで読み込んでください。
+*/
+
+h1 {
+    font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-weight: 700;
+}

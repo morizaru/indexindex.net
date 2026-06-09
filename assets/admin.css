@@ -1,0 +1,546 @@
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 24px;
+    background: #f5f5f5;
+    color: #222;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 24px;
+    border-radius: 8px;
+}
+
+h1 {
+    margin-top: 0;
+}
+
+.nav {
+    margin-bottom: 20px;
+}
+
+.nav a,
+.message a {
+    margin-right: 12px;
+    color: #0066cc;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.nav a:hover,
+.message a:hover {
+    text-decoration: underline;
+}
+
+.message {
+    padding: 12px;
+    background: #e8f5e9;
+    border: 1px solid #81c784;
+    margin-bottom: 16px;
+    border-radius: 4px;
+    line-height: 1.8;
+}
+
+.error {
+    padding: 12px;
+    background: #ffebee;
+    border: 1px solid #e57373;
+    color: #b00020;
+    margin-bottom: 16px;
+    border-radius: 4px;
+}
+
+.info {
+    padding: 12px;
+    background: #f3f3f3;
+    border: 1px solid #ddd;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    line-height: 1.7;
+    color: #555;
+}
+
+.tool-description {
+    padding: 12px;
+    background: #f3f3f3;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    line-height: 1.7;
+    color: #555;
+}
+
+.debug-note {
+    padding: 10px 12px;
+    background: #fff8e1;
+    border: 1px solid #ffd54f;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    color: #6d4c00;
+    line-height: 1.7;
+}
+
+.tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.tab-nav a {
+    display: inline-block;
+    padding: 9px 14px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    color: #0066cc;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.tab-nav a:hover {
+    background: #f0f6ff;
+    text-decoration: none;
+}
+
+.tab-nav .active {
+    background: #333;
+    border-color: #333;
+    color: #fff;
+}
+
+.form-row {
+    margin-bottom: 16px;
+}
+
+label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="file"],
+select,
+textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.select-magazine-wide {
+    min-width: 320px;
+}
+
+textarea {
+    min-height: 80px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.form-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+}
+
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: 1px solid #333;
+    background: #333;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #111;
+}
+
+.required {
+    color: #b00020;
+    font-size: 13px;
+}
+
+.help {
+    color: #666;
+    font-size: 13px;
+    margin-top: 4px;
+    line-height: 1.6;
+}
+
+.count {
+    margin-bottom: 16px;
+    color: #666;
+}
+
+.result-summary {
+    line-height: 1.7;
+}
+
+.filter-box {
+    margin-bottom: 16px;
+}
+
+.filter-box input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.filter-form {
+    margin-bottom: 16px;
+}
+
+.duplicate-filter-form {
+    padding: 16px;
+    background: #fafafa;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+}
+
+.filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: end;
+}
+
+.filter-item {
+    flex: 0 1 220px;
+}
+
+.filter-item-wide {
+    flex-basis: 340px;
+}
+
+.filter-item-year {
+    flex-basis: 150px;
+}
+
+.filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.search-input-wide {
+    min-width: 320px;
+}
+
+.pagination {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin: 16px 0;
+}
+
+.pagination a,
+.pagination span {
+    display: inline-block;
+    padding: 7px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    color: #0066cc;
+    text-decoration: none;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.pagination a:hover {
+    background: #f0f6ff;
+    text-decoration: none;
+}
+
+.pagination .current {
+    background: #333;
+    border-color: #333;
+    color: #fff;
+}
+
+.pagination .disabled,
+.pagination .dots {
+    color: #999;
+    font-weight: normal;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+th,
+td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    vertical-align: top;
+}
+
+th {
+    background: #eee;
+    text-align: left;
+}
+
+.actions {
+    white-space: nowrap;
+}
+
+.button-link {
+    display: inline-block;
+    padding: 6px 10px;
+    background: #333;
+    color: #fff;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 14px;
+    margin-right: 4px;
+    margin-bottom: 4px;
+}
+
+.button-link:hover {
+    background: #111;
+    text-decoration: none;
+}
+
+.button-link.public {
+    background: #0066cc;
+}
+
+.button-link.public:hover {
+    background: #004f9e;
+}
+
+button.delete-button {
+    padding: 6px 10px;
+    background: #b00020;
+    color: #fff;
+    border: 1px solid #b00020;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+button.delete-button:disabled {
+    background: #aaa;
+    border-color: #aaa;
+    cursor: not-allowed;
+}
+
+.small {
+    color: #666;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.normalized-text {
+    color: #777;
+    font-size: 12px;
+    word-break: break-all;
+}
+
+.duplicate-group {
+    margin: 18px 0 24px;
+    padding-top: 12px;
+    border-top: 1px solid #ddd;
+}
+
+.duplicate-group-title {
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.warning-box {
+    margin: 14px 0;
+    padding: 12px 14px;
+    background: #fff8e5;
+    border: 1px solid #e0b84a;
+    border-radius: 4px;
+    color: #5f4300;
+    line-height: 1.6;
+}
+
+.warning-box ul {
+    margin: 8px 0 0 20px;
+    padding: 0;
+}
+
+.merge-tools {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 14px 0;
+    padding: 12px 14px;
+    background: #f7fbff;
+    border: 1px solid #c8dff5;
+    border-radius: 4px;
+}
+
+.merge-tools p {
+    margin: 4px 0 0;
+    color: #555;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.merge-check-column {
+    width: 58px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.merge-check-column input {
+    width: 16px;
+    height: 16px;
+}
+
+.sql-output {
+    margin: 18px 0;
+}
+
+.sql-output h2 {
+    margin: 0 0 8px;
+    font-size: 18px;
+}
+
+.sql-output textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fbfbfb;
+    color: #222;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.empty {
+    padding: 12px;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    color: #666;
+}
+
+.links {
+    line-height: 2;
+}
+
+.links a {
+    margin-right: 12px;
+    color: #0066cc;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.links a:hover {
+    text-decoration: underline;
+}
+
+.section-title {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid #ddd;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+@media (max-width: 700px) {
+    body {
+        margin: 8px;
+    }
+
+    .container {
+        padding: 12px;
+    }
+
+    .form-grid,
+    .form-grid-3 {
+        display: block;
+    }
+
+    .select-magazine-wide {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .filter-row {
+        display: block;
+    }
+
+    .filter-item,
+    .filter-item-wide,
+    .filter-item-year,
+    .filter-actions {
+        width: 100%;
+        margin-bottom: 12px;
+    }
+
+    .filter-actions {
+        display: flex;
+    }
+
+    .search-input-wide {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .pagination {
+        gap: 4px;
+    }
+
+    .pagination a,
+    .pagination span {
+        padding: 7px 9px;
+        font-size: 14px;
+    }
+
+    .merge-tools {
+        display: block;
+    }
+
+    .merge-tools button {
+        margin-top: 10px;
+        width: 100%;
+    }
+
+    .sql-output textarea {
+        font-size: 12px;
+    }
+}

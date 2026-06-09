@@ -1,0 +1,19 @@
+START TRANSACTION;
+
+UPDATE works w
+INNER JOIN (
+    SELECT
+        work_id,
+        COUNT(*) AS content_count
+    FROM issue_contents
+    WHERE work_id IS NOT NULL
+    GROUP BY work_id
+    HAVING COUNT(*) = 1
+) x
+    ON x.work_id = w.id
+SET w.publication_type = 'ì«êÿ'
+WHERE w.publication_type <> 'ì«êÿ'
+   OR w.publication_type IS NULL
+   OR w.publication_type = '';
+
+COMMIT;

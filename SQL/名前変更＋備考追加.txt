@@ -1,0 +1,111 @@
+
+確認
+
+SELECT
+    ic.id AS content_id,
+    ic.title_main,
+    c.id AS creator_id,
+    c.name AS old_creator_name,
+    'BOICHI' AS new_creator_name,
+    ic.note
+FROM content_creators cc
+INNER JOIN creators c
+    ON c.id = cc.creator_id
+INNER JOIN issue_contents ic
+    ON ic.id = cc.content_id
+WHERE c.name = 'BOICHI ボウイチ'
+ORDER BY ic.id, cc.display_order;
+
+
+実行
+
+START TRANSACTION;
+
+CREATE TEMPORARY TABLE tmp_fix_boichi AS
+SELECT
+    cc.id AS content_creator_id,
+    cc.content_id,
+    cc.role,
+    c.id AS old_creator_id,
+    c.name AS old_creator_name,
+    'BOICHI' COLLATE utf8mb4_general_ci AS new_creator_name,
+    '＋BOICHI ボウイチ' COLLATE utf8mb4_general_ci AS note_add
+FROM content_creators cc
+INNER JOIN creators c
+    ON c.id = cc.creator_id
+WHERE c.name = 'BOICHI ボウイチ';
+
+/* 新しい作者名が creators に無ければ作成 */
+INSERT INTO creators (name)
+SELECT DISTINCT t.new_creator_name
+FROM tmp_fix_boichi t
+LEFT JOIN creators c
+    ON c.name = t.new_creator_name COLLATE utf8mb4_general_ci
+WHERE c.id IS NULL;
+
+/* 備考に ＋BOICHI ボウイチ を追加 */
+UPDATE issue_contents ic
+INNER JOIN (
+    SELECT
+        t.content_id,
+        t.note_add
+    FROM tmp_fix_boichi t
+    GROUP BY t.content_id, t.note_add
+) x
+    ON x.content_id = ic.id
+SET ic.note =
+    CASE
+        WHEN ic.note IS NULL OR ic.note = '' THEN x.note_add
+        ELSE CONCAT(ic.note, '　／　', x.note_add)
+    END
+WHERE COALESCE(ic.note, '') NOT LIKE '%＋BOICHI ボウイチ%';
+
+/* すでに同じ作品・同じ役割・BOICHI がある場合は古い行を削除 */
+CREATE TEMPORARY TABLE tmp_delete_boichi_cc AS
+SELECT
+    cc.id AS content_creator_id
+FROM content_creators cc
+INNER JOIN tmp_fix_boichi t
+    ON t.content_creator_id = cc.id
+INNER JOIN creators new_c
+    ON new_c.name = t.new_creator_name COLLATE utf8mb4_general_ci
+INNER JOIN content_creators cc2
+    ON cc2.content_id = cc.content_id
+   AND cc2.creator_id = new_c.id
+   AND cc2.role = cc.role
+   AND cc2.id <> cc.id;
+
+/* 重複する古い content_creators を削除 */
+DELETE cc
+FROM content_creators cc
+INNER JOIN tmp_delete_boichi_cc d
+    ON d.content_creator_id = cc.id;
+
+/* 作者IDを BOICHI ボウイチ → BOICHI に付け替え */
+UPDATE content_creators cc
+INNER JOIN tmp_fix_boichi t
+    ON t.content_creator_id = cc.id
+INNER JOIN creators new_c
+    ON new_c.name = t.new_creator_name COLLATE utf8mb4_general_ci
+SET cc.creator_id = new_c.id;
+
+/* 使われなくなった古い作者名を削除 */
+CREATE TEMPORARY TABLE tmp_delete_boichi_creators AS
+SELECT
+    c.id AS creator_id
+FROM creators c
+LEFT JOIN content_creators cc
+    ON cc.creator_id = c.id
+WHERE cc.id IS NULL
+  AND c.name = 'BOICHI ボウイチ';
+
+DELETE c
+FROM creators c
+INNER JOIN tmp_delete_boichi_creators d
+    ON d.creator_id = c.id;
+
+DROP TEMPORARY TABLE tmp_delete_boichi_creators;
+DROP TEMPORARY TABLE tmp_delete_boichi_cc;
+DROP TEMPORARY TABLE tmp_fix_boichi;
+
+COMMIT;
