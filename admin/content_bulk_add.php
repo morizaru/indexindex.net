@@ -32,7 +32,7 @@ function validate_episode_no_bulk($value, $row_number) {
 }
 
 // 一括登録の入力行数
-const BULK_ROW_COUNT = 35;
+const BULK_ROW_COUNT = 40;
 
 // 指定した雑誌号の目次を開始ページ順で並べ直し、掲載順を 1,2,3... に振り直す
 function renumber_issue_contents($pdo, $issue_id) {
