@@ -866,6 +866,42 @@ $to_count = min($offset + $per_page, $total_count);
             border-radius: 6px;
         }
 
+        .top-button {
+            position: fixed;
+            right: 22px;
+            bottom: 22px;
+            width: 54px;
+            height: 54px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #333, #111);
+            color: #fff;
+            font-weight: 800;
+            font-size: 14px;
+            letter-spacing: 0.04em;
+            text-decoration: none;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+            opacity: 0;
+            transform: translateY(12px);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            z-index: 1000;
+        }
+
+        .top-button.is-visible {
+            opacity: 0.92;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .top-button:hover {
+            opacity: 1;
+            text-decoration: none;
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+        }
+
         @media (max-width: 980px) {
             body {
                 padding: 8px;
@@ -983,6 +1019,14 @@ $to_count = min($offset + $per_page, $total_count);
                 text-align: left;
                 white-space: normal;
             }
+
+            .top-button {
+                right: 14px;
+                bottom: 14px;
+                width: 48px;
+                height: 48px;
+                font-size: 13px;
+            }
         }
     </style>
 
@@ -991,7 +1035,7 @@ $to_count = min($offset + $per_page, $total_count);
     <link rel="stylesheet" href="assets/css/common.css">
     
 </head>
-<body>
+<body id="top">
 
 <?php
 $current_page = 'works';
@@ -1298,13 +1342,31 @@ require_once __DIR__ . '/includes/header.php';
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
 
+<a href="#top" class="top-button" id="topButton" aria-label="TOPへ戻る">TOP</a>
+
 <script>
+const topButton = document.getElementById('topButton');
 const publisherSelect = document.getElementById('publisher_id');
 const magazineSelect = document.getElementById('magazine_id');
 const yearSelect = document.getElementById('year');
 const publisherKeywordInput = document.getElementById('publisher_keyword');
 const magazineKeywordInput = document.getElementById('magazine_keyword');
 const yearKeywordInput = document.getElementById('year_keyword');
+
+function toggleTopButton() {
+    if (!topButton) {
+        return;
+    }
+
+    if (window.scrollY > 240) {
+        topButton.classList.add('is-visible');
+    } else {
+        topButton.classList.remove('is-visible');
+    }
+}
+
+window.addEventListener('scroll', toggleTopButton, { passive: true });
+toggleTopButton();
 
 function normalizeSelectKeyword(value) {
     return String(value || '').trim().toLowerCase();
