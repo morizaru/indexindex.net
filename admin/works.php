@@ -9,7 +9,7 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
-function build_works_page_url(int $page, int $publisher_id, int $magazine_id, string $publication_year, string $q): string {
+function build_works_page_url(int $page, int $publisher_id, int $magazine_id, string $publication_year, string $q, bool $zero_only): string {
     $query = [];
 
     if ($publisher_id > 0) {
@@ -28,6 +28,10 @@ function build_works_page_url(int $page, int $publisher_id, int $magazine_id, st
         $query['q'] = $q;
     }
 
+    if ($zero_only) {
+        $query['zero_only'] = 1;
+    }
+
     if ($page > 1) {
         $query['page'] = $page;
     }
@@ -36,7 +40,7 @@ function build_works_page_url(int $page, int $publisher_id, int $magazine_id, st
     return 'works.php' . ($query_string !== '' ? '?' . $query_string : '');
 }
 
-function render_pagination(int $page, int $total_pages, int $publisher_id, int $magazine_id, string $publication_year, string $q): void {
+function render_pagination(int $page, int $total_pages, int $publisher_id, int $magazine_id, string $publication_year, string $q, bool $zero_only): void {
     if ($total_pages <= 1) {
         return;
     }
@@ -46,15 +50,15 @@ function render_pagination(int $page, int $total_pages, int $publisher_id, int $
     ?>
     <div class="pagination" aria-label="ページ移動">
         <?php if ($page > 1): ?>
-            <a href="<?= h(build_works_page_url(1, $publisher_id, $magazine_id, $publication_year, $q)) ?>">最初</a>
-            <a href="<?= h(build_works_page_url($page - 1, $publisher_id, $magazine_id, $publication_year, $q)) ?>">前へ</a>
+            <a href="<?= h(build_works_page_url(1, $publisher_id, $magazine_id, $publication_year, $q, $zero_only)) ?>">最初</a>
+            <a href="<?= h(build_works_page_url($page - 1, $publisher_id, $magazine_id, $publication_year, $q, $zero_only)) ?>">前へ</a>
         <?php else: ?>
             <span class="disabled">最初</span>
             <span class="disabled">前へ</span>
         <?php endif; ?>
 
         <?php if ($start_page > 1): ?>
-            <a href="<?= h(build_works_page_url(1, $publisher_id, $magazine_id, $publication_year, $q)) ?>">1</a>
+            <a href="<?= h(build_works_page_url(1, $publisher_id, $magazine_id, $publication_year, $q, $zero_only)) ?>">1</a>
             <?php if ($start_page > 2): ?>
                 <span class="dots">...</span>
             <?php endif; ?>
@@ -64,7 +68,7 @@ function render_pagination(int $page, int $total_pages, int $publisher_id, int $
             <?php if ($i === $page): ?>
                 <span class="current"><?= h($i) ?></span>
             <?php else: ?>
-                <a href="<?= h(build_works_page_url($i, $publisher_id, $magazine_id, $publication_year, $q)) ?>"><?= h($i) ?></a>
+                <a href="<?= h(build_works_page_url($i, $publisher_id, $magazine_id, $publication_year, $q, $zero_only)) ?>"><?= h($i) ?></a>
             <?php endif; ?>
         <?php endfor; ?>
 
@@ -72,12 +76,12 @@ function render_pagination(int $page, int $total_pages, int $publisher_id, int $
             <?php if ($end_page < $total_pages - 1): ?>
                 <span class="dots">...</span>
             <?php endif; ?>
-            <a href="<?= h(build_works_page_url($total_pages, $publisher_id, $magazine_id, $publication_year, $q)) ?>"><?= h($total_pages) ?></a>
+            <a href="<?= h(build_works_page_url($total_pages, $publisher_id, $magazine_id, $publication_year, $q, $zero_only)) ?>"><?= h($total_pages) ?></a>
         <?php endif; ?>
 
         <?php if ($page < $total_pages): ?>
-            <a href="<?= h(build_works_page_url($page + 1, $publisher_id, $magazine_id, $publication_year, $q)) ?>">次へ</a>
-            <a href="<?= h(build_works_page_url($total_pages, $publisher_id, $magazine_id, $publication_year, $q)) ?>">最後</a>
+            <a href="<?= h(build_works_page_url($page + 1, $publisher_id, $magazine_id, $publication_year, $q, $zero_only)) ?>">次へ</a>
+            <a href="<?= h(build_works_page_url($total_pages, $publisher_id, $magazine_id, $publication_year, $q, $zero_only)) ?>">最後</a>
         <?php else: ?>
             <span class="disabled">次へ</span>
             <span class="disabled">最後</span>
@@ -93,6 +97,7 @@ $publisher_id = isset($_GET['publisher_id']) ? (int)$_GET['publisher_id'] : 0;
 $magazine_id = isset($_GET['magazine_id']) ? (int)$_GET['magazine_id'] : 0;
 $publication_year = trim((string)($_GET['publication_year'] ?? ''));
 $q = trim((string)($_GET['q'] ?? ''));
+$zero_only = (($_GET['zero_only'] ?? '') === '1');
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $per_page = 100;
 
@@ -254,6 +259,14 @@ if ($publisher_id > 0 || $magazine_id > 0 || $publication_year !== '') {
         JOIN magazines m2 ON mi2.magazine_id = m2.id
         WHERE ic2.work_id = w.id
           AND " . implode("\n          AND ", $exists_where) . "
+    )";
+}
+
+if ($zero_only) {
+    $where[] = "NOT EXISTS (
+        SELECT 1
+        FROM issue_contents ic_zero
+        WHERE ic_zero.work_id = w.id
     )";
 }
 
@@ -622,6 +635,13 @@ $works = $stmt->fetchAll();
                 >
             </div>
 
+            <div class="filter-item">
+                <label>
+                    <input type="checkbox" name="zero_only" value="1" <?= $zero_only ? 'checked' : '' ?>>
+                    登録件数0のみ表示
+                </label>
+            </div>
+
             <div class="filter-actions">
                 <button type="submit">検索</button>
                 <a class="button-link" href="works.php">条件リセット</a>
@@ -629,7 +649,7 @@ $works = $stmt->fetchAll();
         </div>
     </form>
 
-    <?php render_pagination($page, $total_pages, $publisher_id, $magazine_id, $publication_year, $q); ?>
+    <?php render_pagination($page, $total_pages, $publisher_id, $magazine_id, $publication_year, $q, $zero_only); ?>
 
     <?php if (empty($works)): ?>
 
@@ -739,7 +759,7 @@ $works = $stmt->fetchAll();
 
     <?php endif; ?>
 
-    <?php render_pagination($page, $total_pages, $publisher_id, $magazine_id, $publication_year, $q); ?>
+    <?php render_pagination($page, $total_pages, $publisher_id, $magazine_id, $publication_year, $q, $zero_only); ?>
 
 </div>
 
