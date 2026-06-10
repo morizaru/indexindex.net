@@ -296,26 +296,16 @@ $menu_items = [
         'title' => '雑誌一覧',
         'description' => '雑誌データを表示します。',
         'url' => 'issues.php',
-        'counts' => [
-            ['label' => '登録雑誌数', 'value' => $magazineCount, 'unit' => '誌'],
-            ['label' => '登録雑誌号数', 'value' => $issueCount, 'unit' => '号'],
-        ],
     ],
     [
         'title' => '作品一覧',
         'description' => '掲載作品データを表示します。',
         'url' => 'works.php',
-        'counts' => [
-            ['label' => '登録作品数', 'value' => $workCount, 'unit' => '件'],
-        ],
     ],
     [
         'title' => '人物一覧',
         'description' => '関連人物データを表示します。',
         'url' => 'creators.php',
-        'counts' => [
-            ['label' => '登録人物数', 'value' => $creatorCount, 'unit' => '人'],
-        ],
     ],
     [
         'title' => '詳細検索',
