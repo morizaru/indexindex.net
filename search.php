@@ -17,17 +17,23 @@ function selected_attr($value, $current) {
 }
 
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
-$target = isset($_GET['target']) ? trim((string)$_GET['target']) : 'magazine';
+$target = isset($_GET['target']) ? trim((string)$_GET['target']) : 'all';
 
-$allowed_targets = ['magazine', 'work', 'creator'];
+$allowed_targets = ['all', 'magazine', 'work', 'creator'];
 if (!in_array($target, $allowed_targets, true)) {
-    $target = 'magazine';
+    $target = 'all';
 }
 
 $results = [];
+$all_results = [
+    'magazine' => [],
+    'work' => [],
+    'creator' => [],
+];
 $limit = 500;
 
 $target_labels = [
+    'all' => '全て',
     'magazine' => '雑誌名',
     'work' => '作品名',
     'creator' => '作者名',
@@ -36,7 +42,7 @@ $target_labels = [
 if ($q !== '') {
     $keyword = '%' . $q . '%';
 
-    if ($target === 'magazine') {
+    if ($target === 'all' || $target === 'magazine') {
         $sql = "
             SELECT
                 m.id AS magazine_id,
@@ -64,10 +70,14 @@ if ($q !== '') {
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':keyword' => $keyword]);
-        $results = $stmt->fetchAll();
+        if ($target === 'all') {
+            $all_results['magazine'] = $stmt->fetchAll();
+        } else {
+            $results = $stmt->fetchAll();
+        }
     }
 
-    if ($target === 'work') {
+    if ($target === 'all' || $target === 'work') {
         $sql = "
             SELECT
                 w.id AS work_id,
@@ -99,10 +109,14 @@ if ($q !== '') {
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':keyword' => $keyword]);
-        $results = $stmt->fetchAll();
+        if ($target === 'all') {
+            $all_results['work'] = $stmt->fetchAll();
+        } else {
+            $results = $stmt->fetchAll();
+        }
     }
 
-    if ($target === 'creator') {
+    if ($target === 'all' || $target === 'creator') {
         $sql = "
             SELECT
                 c.id AS creator_id,
@@ -131,7 +145,28 @@ if ($q !== '') {
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':keyword' => $keyword]);
-        $results = $stmt->fetchAll();
+        if ($target === 'all') {
+            $all_results['creator'] = $stmt->fetchAll();
+        } else {
+            $results = $stmt->fetchAll();
+        }
+    }
+}
+
+$total_results = ($target === 'all')
+    ? count($all_results['magazine']) + count($all_results['work']) + count($all_results['creator'])
+    : count($results);
+
+$all_result_tabs = [
+    'magazine' => '雑誌名',
+    'work' => '作品名',
+    'creator' => '作者名',
+];
+$active_all_tab = 'magazine';
+foreach ($all_result_tabs as $tab_key => $tab_label) {
+    if (!empty($all_results[$tab_key])) {
+        $active_all_tab = $tab_key;
+        break;
     }
 }
 ?>
@@ -315,10 +350,47 @@ if ($q !== '') {
             font-size: 13px;
         }
 
-        .actions a {
-            display: inline-block;
-            margin-right: 10px;
-            font-size: 13px;
+        .result-section {
+            margin-top: 22px;
+        }
+
+        .result-section h2 {
+            margin: 0 0 10px;
+            font-size: 20px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+        }
+
+        .result-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 0 0 14px;
+        }
+
+        .result-tab {
+            padding: 8px 14px;
+            border: 1px solid #ccc;
+            background: #fff;
+            color: #333;
+            border-radius: 999px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .result-tab.is-active {
+            background: #333;
+            border-color: #333;
+            color: #fff;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.is-active {
+            display: block;
         }
 
         .footer {
@@ -396,7 +468,6 @@ if ($q !== '') {
             td.count-cell::before { content: "件数"; }
             td.year-cell::before { content: "収録年"; }
             td.type-cell::before { content: "区分"; }
-            td.actions::before { content: "リンク"; }
         }
     </style>
 
@@ -428,6 +499,7 @@ require_once __DIR__ . '/includes/header.php';
         </div>
 
         <div class="radio-row">
+            <label><input type="radio" name="target" value="all"<?= selected_attr('all', $target) ?>> 全て</label>
             <label><input type="radio" name="target" value="magazine"<?= selected_attr('magazine', $target) ?>> 雑誌名</label>
             <label><input type="radio" name="target" value="work"<?= selected_attr('work', $target) ?>> 作品名</label>
             <label><input type="radio" name="target" value="creator"<?= selected_attr('creator', $target) ?>> 作者名</label>
@@ -449,15 +521,145 @@ require_once __DIR__ . '/includes/header.php';
     <?php else: ?>
 
         <div class="count">
-            「<?= h($q) ?>」の<?= h($target_labels[$target]) ?>検索結果：<?= count($results) ?>件
-            <?php if (count($results) >= $limit): ?>
+            「<?= h($q) ?>」の<?= h($target_labels[$target]) ?>検索結果：<?= h($total_results) ?>件
+            <?php if ($target === 'all' && (count($all_results['magazine']) >= $limit || count($all_results['work']) >= $limit || count($all_results['creator']) >= $limit)): ?>
+                <span class="small">※各カテゴリ最大<?= h($limit) ?>件まで表示しています。</span>
+            <?php elseif ($target !== 'all' && count($results) >= $limit): ?>
                 <span class="small">※最大<?= h($limit) ?>件まで表示しています。</span>
             <?php endif; ?>
         </div>
 
-        <?php if (empty($results)): ?>
+        <?php if ($total_results === 0): ?>
 
             <p class="notice">該当するデータは見つかりませんでした。表記を変える、検索対象を切り替える、キーワードを短くするなどして再検索してください。雑誌名・作品名・作者名のどれを探しているかに合わせて、検索対象のラジオボタンを変更できます。</p>
+
+        <?php elseif ($target === 'all'): ?>
+
+            <div class="result-tabs" role="tablist" aria-label="検索結果カテゴリ">
+                <?php foreach ($all_result_tabs as $tab_key => $tab_label): ?>
+                    <?php if (empty($all_results[$tab_key])) continue; ?>
+                    <button
+                        type="button"
+                        class="result-tab<?= ($active_all_tab === $tab_key) ? ' is-active' : '' ?>"
+                        data-tab-target="<?= h($tab_key) ?>"
+                        role="tab"
+                        aria-selected="<?= ($active_all_tab === $tab_key) ? 'true' : 'false' ?>"
+                    >
+                        <?= h($tab_label) ?>（<?= h(count($all_results[$tab_key])) ?>）
+                    </button>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if (!empty($all_results['magazine'])): ?>
+                <div class="result-section tab-panel<?= ($active_all_tab === 'magazine') ? ' is-active' : '' ?>" data-tab-panel="magazine" role="tabpanel">
+                    <h2>雑誌名の検索結果</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>雑誌名</th>
+                                <th>出版社</th>
+                                <th>雑誌号数</th>
+                                <th>収録年</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($all_results['magazine'] as $row): ?>
+                            <tr>
+                                <td class="name-cell">
+                                    <div class="main-name">
+                                        <a href="issues.php?magazine_id=<?= h($row['magazine_id']) ?>"><?= h($row['magazine_name']) ?></a>
+                                    </div>
+                                </td>
+                                <td class="publisher-cell"><?= h($row['publisher_name'] ?? '') ?></td>
+                                <td class="count-cell"><?= h($row['issue_count']) ?>件</td>
+                                <td class="year-cell">
+                                    <?php if (!empty($row['first_year']) && !empty($row['last_year'])): ?>
+                                        <?= h($row['first_year']) ?>〜<?= h($row['last_year']) ?>年
+                                    <?php else: ?>
+                                        -
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($all_results['work'])): ?>
+                <div class="result-section tab-panel<?= ($active_all_tab === 'work') ? ' is-active' : '' ?>" data-tab-panel="work" role="tabpanel">
+                    <h2>作品名の検索結果</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>作品名</th>
+                                <th>区分</th>
+                                <th>登録件数</th>
+                                <th>収録年</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($all_results['work'] as $row): ?>
+                            <tr>
+                                <td class="name-cell">
+                                    <div class="main-name">
+                                        <a href="work.php?work_id=<?= h($row['work_id']) ?>"><?= h($row['work_title']) ?></a>
+                                    </div>
+                                    <?php if (!empty($row['work_title_sub'])): ?>
+                                        <div class="sub-name"><?= h($row['work_title_sub']) ?></div>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="type-cell"><?= h($row['publication_type'] ?? '') ?></td>
+                                <td class="count-cell"><?= h($row['content_count']) ?>件</td>
+                                <td class="year-cell">
+                                    <?php if (!empty($row['first_year']) && !empty($row['last_year'])): ?>
+                                        <?= h($row['first_year']) ?>〜<?= h($row['last_year']) ?>年
+                                    <?php else: ?>
+                                        -
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($all_results['creator'])): ?>
+                <div class="result-section tab-panel<?= ($active_all_tab === 'creator') ? ' is-active' : '' ?>" data-tab-panel="creator" role="tabpanel">
+                    <h2>作者名の検索結果</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>作者名</th>
+                                <th>作品数</th>
+                                <th>目次件数</th>
+                                <th>収録年</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($all_results['creator'] as $row): ?>
+                            <tr>
+                                <td class="name-cell">
+                                    <div class="main-name">
+                                        <a href="creator.php?creator_id=<?= h($row['creator_id']) ?>"><?= h($row['creator_name']) ?></a>
+                                    </div>
+                                </td>
+                                <td class="count-cell"><?= h($row['work_count']) ?>件</td>
+                                <td class="count-cell"><?= h($row['content_count']) ?>件</td>
+                                <td class="year-cell">
+                                    <?php if (!empty($row['first_year']) && !empty($row['last_year'])): ?>
+                                        <?= h($row['first_year']) ?>〜<?= h($row['last_year']) ?>年
+                                    <?php else: ?>
+                                        -
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
 
         <?php elseif ($target === 'magazine'): ?>
 
@@ -468,14 +670,15 @@ require_once __DIR__ . '/includes/header.php';
                         <th>出版社</th>
                         <th>雑誌号数</th>
                         <th>収録年</th>
-                        <th>リンク</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($results as $row): ?>
                     <tr>
                         <td class="name-cell">
-                            <div class="main-name"><?= h($row['magazine_name']) ?></div>
+                            <div class="main-name">
+                                <a href="issues.php?magazine_id=<?= h($row['magazine_id']) ?>"><?= h($row['magazine_name']) ?></a>
+                            </div>
                         </td>
                         <td class="publisher-cell"><?= h($row['publisher_name'] ?? '') ?></td>
                         <td class="count-cell"><?= h($row['issue_count']) ?>件</td>
@@ -485,9 +688,6 @@ require_once __DIR__ . '/includes/header.php';
                             <?php else: ?>
                                 -
                             <?php endif; ?>
-                        </td>
-                        <td class="actions">
-                            <a href="issues.php?magazine_id=<?= h($row['magazine_id']) ?>">雑誌号を見る</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -503,14 +703,15 @@ require_once __DIR__ . '/includes/header.php';
                         <th>区分</th>
                         <th>登録件数</th>
                         <th>収録年</th>
-                        <th>リンク</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($results as $row): ?>
                     <tr>
                         <td class="name-cell">
-                            <div class="main-name"><?= h($row['work_title']) ?></div>
+                            <div class="main-name">
+                                <a href="work.php?work_id=<?= h($row['work_id']) ?>"><?= h($row['work_title']) ?></a>
+                            </div>
                             <?php if (!empty($row['work_title_sub'])): ?>
                                 <div class="sub-name"><?= h($row['work_title_sub']) ?></div>
                             <?php endif; ?>
@@ -523,10 +724,6 @@ require_once __DIR__ . '/includes/header.php';
                             <?php else: ?>
                                 -
                             <?php endif; ?>
-                        </td>
-                        <td class="actions">
-                            <a href="works.php?q=<?= urlencode($row['work_title']) ?>">作品一覧で見る</a>
-                            <a href="work_graph.php?work_id=<?= h($row['work_id']) ?>">グラフ</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -542,14 +739,15 @@ require_once __DIR__ . '/includes/header.php';
                         <th>作品数</th>
                         <th>目次件数</th>
                         <th>収録年</th>
-                        <th>リンク</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($results as $row): ?>
                     <tr>
                         <td class="name-cell">
-                            <div class="main-name"><?= h($row['creator_name']) ?></div>
+                            <div class="main-name">
+                                <a href="creator.php?creator_id=<?= h($row['creator_id']) ?>"><?= h($row['creator_name']) ?></a>
+                            </div>
                         </td>
                         <td class="count-cell"><?= h($row['work_count']) ?>件</td>
                         <td class="count-cell"><?= h($row['content_count']) ?>件</td>
@@ -559,9 +757,6 @@ require_once __DIR__ . '/includes/header.php';
                             <?php else: ?>
                                 -
                             <?php endif; ?>
-                        </td>
-                        <td class="actions">
-                            <a href="creators.php?q=<?= urlencode($row['creator_name']) ?>">人物一覧で見る</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -575,6 +770,24 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
+
+<script>
+document.querySelectorAll('.result-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const target = tab.dataset.tabTarget;
+
+        document.querySelectorAll('.result-tab').forEach(item => {
+            const isActive = item === tab;
+            item.classList.toggle('is-active', isActive);
+            item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+            panel.classList.toggle('is-active', panel.dataset.tabPanel === target);
+        });
+    });
+});
+</script>
 
 </body>
 </html>
