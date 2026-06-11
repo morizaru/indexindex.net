@@ -86,6 +86,7 @@ header('Content-Type: text/html; charset=UTF-8');
     <div class="link-group-title">TOOL</div>
     <ul>
         <li><a href="access_analytics.php">アクセスログ</a></li>
+        <li><a href="x_post_draft.php">X投稿用下書き</a></li>
         <li><a href="duplicate_check.php">重複チェック</a></li>
         <li><a href="ndl_toc_url_finder.php">NDL漫画ジャンル目次URL抽出</a></li>
     </ul>
