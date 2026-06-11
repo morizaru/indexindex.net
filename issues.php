@@ -330,16 +330,25 @@ $where[] = "mi.status = 'approved'";
 if ($publisher_id > 0) {
     $where[] = "p.id = :publisher_id";
     $params[':publisher_id'] = $publisher_id;
+} elseif ($publisher_keyword !== '') {
+    $where[] = "p.name LIKE :keyword_publisher_word";
+    $params[':keyword_publisher_word'] = '%' . $publisher_keyword . '%';
 }
 
 if ($filter_magazine_id > 0) {
     $where[] = "m.id = :filter_magazine_id";
     $params[':filter_magazine_id'] = $filter_magazine_id;
+} elseif ($magazine_keyword !== '') {
+    $where[] = "m.name LIKE :keyword_magazine_word";
+    $params[':keyword_magazine_word'] = '%' . $magazine_keyword . '%';
 }
 
 if ($year > 0) {
     $where[] = "{$publication_year_sql} = :display_year";
     $params[':display_year'] = $year;
+} elseif ($year_keyword !== '') {
+    $where[] = "CAST({$publication_year_sql} AS CHAR) LIKE :keyword_year_word";
+    $params[':keyword_year_word'] = '%' . $year_keyword . '%';
 }
 
 if ($keyword !== '') {
