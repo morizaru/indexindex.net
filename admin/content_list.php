@@ -105,31 +105,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 // 並び順更新処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_order') {
     $post_issue_id = isset($_POST['issue_id']) ? (int)$_POST['issue_id'] : 0;
+    $content_order = trim((string)($_POST['content_order'] ?? ''));
     $order_json = $_POST['order_json'] ?? '';
 
     if ($post_issue_id <= 0) {
         $error = '雑誌号IDが不正です。';
-    } elseif ($order_json === '') {
+    } elseif ($content_order === '' && $order_json === '') {
         $error = '並び順データがありません。';
     } else {
         try {
-            $ids = json_decode($order_json, true);
+            if ($content_order !== '') {
+                $ids = array_filter(array_map('trim', explode(',', $content_order)), 'strlen');
+            } else {
+                $ids = json_decode($order_json, true);
+            }
 
             if (!is_array($ids) || empty($ids)) {
                 throw new Exception('並び順データが不正です。');
+            }
+
+            $content_ids = [];
+            foreach ($ids as $id) {
+                $content_id = (int)$id;
+                if ($content_id > 0) {
+                    $content_ids[] = $content_id;
+                }
+            }
+
+            $content_ids = array_values(array_unique($content_ids));
+
+            if (empty($content_ids)) {
+                throw new Exception('並び順データが不正です。');
+            }
+
+            $placeholders = [];
+            $check_params = [
+                ':issue_id' => $post_issue_id
+            ];
+
+            foreach ($content_ids as $index => $content_id) {
+                $key = ':id' . $index;
+                $placeholders[] = $key;
+                $check_params[$key] = $content_id;
+            }
+
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) AS cnt
+                FROM issue_contents
+                WHERE issue_id = :issue_id
+                  AND id IN (" . implode(',', $placeholders) . ")
+            ");
+            $stmt->execute($check_params);
+            $valid_count = (int)($stmt->fetch()['cnt'] ?? 0);
+
+            if ($valid_count !== count($content_ids)) {
+                throw new Exception('対象外の目次データが含まれています。');
+            }
+
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) AS cnt
+                FROM issue_contents
+                WHERE issue_id = :issue_id
+            ");
+            $stmt->execute([
+                ':issue_id' => $post_issue_id
+            ]);
+            $issue_content_count = (int)($stmt->fetch()['cnt'] ?? 0);
+
+            if ($issue_content_count !== count($content_ids)) {
+                throw new Exception('並び順データの件数が一致しません。画面を再読み込みしてから再度お試しください。');
             }
 
             $pdo->beginTransaction();
 
             $order = 1;
 
-            foreach ($ids as $id) {
-                $content_id = (int)$id;
-
-                if ($content_id <= 0) {
-                    continue;
-                }
-
+            foreach ($content_ids as $content_id) {
                 // 対象の雑誌号に属する目次だけ更新
                 $stmt = $pdo->prepare("
                     UPDATE issue_contents
@@ -587,6 +638,35 @@ if ($issue_id > 0) {
             background: #eee;
         }
 
+        .drag-handle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            margin-right: 4px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            background: #f7f7f7;
+            color: #555;
+            cursor: grab;
+            font-weight: bold;
+            user-select: none;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        tr.is-dragging {
+            opacity: 0.45;
+        }
+
+        tr.drag-over {
+            outline: 2px solid #00897b;
+            outline-offset: -2px;
+        }
+
         .update-order-box {
             margin-top: 20px;
             padding: 16px;
@@ -782,7 +862,7 @@ if ($issue_id > 0) {
         <?php else: ?>
 
             <div class="help-box">
-                「↑」「↓」で行を入れ替えたあと、一番下の「並び順を更新する」を押すと掲載順が確定します。<br>
+                「↑」「↓」またはドラッグ＆ドロップで行を入れ替えたあと、一番下の「並び順を保存」を押すと掲載順が確定します。<br>
                 フィルター中に入れ替えると見えない行との位置関係が分かりにくくなるため、並び替え前は絞り込みを空にするのがおすすめです。
             </div>
 
@@ -805,12 +885,13 @@ if ($issue_id > 0) {
                 </thead>
                 <tbody id="contentsTbody">
                 <?php foreach ($contents as $row): ?>
-                    <tr data-content-id="<?= h($row['id']) ?>">
+                    <tr data-content-id="<?= h($row['id']) ?>" draggable="true">
                         <td class="order">
                             <span class="order-number"><?= h($row['sort_order']) ?></span>
                         </td>
 
                         <td class="move">
+                            <span class="drag-handle" title="ドラッグで並び替え">⇅</span>
                             <button type="button" class="move-button move-up">↑</button>
                             <button type="button" class="move-button move-down">↓</button>
                         </td>
@@ -866,11 +947,12 @@ if ($issue_id > 0) {
             <form method="post" action="<?= h($content_list_action) ?>" id="orderForm">
                 <input type="hidden" name="action" value="update_order">
                 <input type="hidden" name="issue_id" value="<?= h($issue_id) ?>">
+                <input type="hidden" name="content_order" id="contentOrder" value="">
                 <input type="hidden" name="order_json" id="orderJson" value="">
 
                 <div class="update-order-box">
                     <span class="muted">現在の画面上の並び順で掲載順を更新します。</span>
-                    <button type="submit" class="update-order-button">並び順を更新する</button>
+                    <button type="submit" class="update-order-button">並び順を保存</button>
                 </div>
             </form>
 
@@ -885,12 +967,14 @@ const filterInput = document.getElementById('contentFilter');
 const table = document.getElementById('contentsTable');
 const tbody = document.getElementById('contentsTbody');
 const orderForm = document.getElementById('orderForm');
+const contentOrder = document.getElementById('contentOrder');
 const orderJson = document.getElementById('orderJson');
 const issueFilterForm = document.getElementById('issueFilterForm');
 const publisherFilter = document.getElementById('publisherFilter');
 const magazineFilter = document.getElementById('magazineFilter');
 const publicationYearFilter = document.getElementById('publicationYearFilter');
 const issueSelect = document.getElementById('issueSelect');
+let draggedRow = null;
 
 function resetIssueSelection() {
     if (issueSelect) {
@@ -989,6 +1073,68 @@ if (tbody) {
             moveRow(row, 'down');
         }
     });
+
+    tbody.addEventListener('dragstart', event => {
+        const row = event.target.closest('tr');
+
+        if (!row || !row.dataset.contentId) {
+            return;
+        }
+
+        draggedRow = row;
+        row.classList.add('is-dragging');
+
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', row.dataset.contentId);
+        }
+    });
+
+    tbody.addEventListener('dragover', event => {
+        if (!draggedRow) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const targetRow = event.target.closest('tr');
+        if (!targetRow || targetRow === draggedRow || targetRow.parentNode !== tbody) {
+            return;
+        }
+
+        tbody.querySelectorAll('tr.drag-over').forEach(row => {
+            row.classList.remove('drag-over');
+        });
+        targetRow.classList.add('drag-over');
+
+        const rect = targetRow.getBoundingClientRect();
+        const insertBefore = event.clientY < rect.top + rect.height / 2;
+
+        if (insertBefore) {
+            tbody.insertBefore(draggedRow, targetRow);
+        } else {
+            tbody.insertBefore(draggedRow, targetRow.nextElementSibling);
+        }
+
+        refreshOrderNumbers();
+    });
+
+    tbody.addEventListener('drop', event => {
+        event.preventDefault();
+    });
+
+    tbody.addEventListener('dragend', () => {
+        if (draggedRow) {
+            draggedRow.classList.remove('is-dragging');
+        }
+
+        tbody.querySelectorAll('tr.drag-over').forEach(row => {
+            row.classList.remove('drag-over');
+        });
+
+        draggedRow = null;
+        refreshOrderNumbers();
+    });
 }
 
 if (filterInput && table) {
@@ -1020,6 +1166,9 @@ if (orderForm && orderJson && tbody) {
             return;
         }
 
+        if (contentOrder) {
+            contentOrder.value = ids.join(',');
+        }
         orderJson.value = JSON.stringify(ids);
     });
 }
