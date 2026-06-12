@@ -14,13 +14,17 @@ $error = '';
 
 $name = '';
 $name_kana = '';
+$name_search = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $name_kana = trim($_POST['name_kana'] ?? '');
+    $name_search = trim($_POST['name_search'] ?? '');
 
     if ($name === '') {
         $error = '人物名を入力してください。';
+    } elseif (mb_strlen($name_search, 'UTF-8') > 255) {
+        $error = '検索用表記ゆれは255文字以内で入力してください。';
     } else {
         try {
             // 重複チェック
@@ -41,16 +45,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     INSERT INTO creators (
                         name,
-                        name_kana
+                        name_kana,
+                        name_search
                     ) VALUES (
                         :name,
-                        :name_kana
+                        :name_kana,
+                        :name_search
                     )
                 ");
 
                 $stmt->execute([
                     ':name' => $name,
                     ':name_kana' => ($name_kana !== '') ? $name_kana : null,
+                    ':name_search' => ($name_search !== '') ? $name_search : null,
                 ]);
 
                 $new_id = (int)$pdo->lastInsertId();
@@ -59,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $name = '';
                 $name_kana = '';
+                $name_search = '';
             }
         } catch (Exception $e) {
             $error = '登録エラー：' . $e->getMessage();
@@ -109,6 +117,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label>人物名かな</label>
             <input type="text" name="name_kana" value="<?= h($name_kana) ?>" placeholder="例：ちばてつや / チバテツヤ">
             <div class="help">任意。検索・並び替え用に使えます。</div>
+        </div>
+
+        <div class="form-row">
+            <label>検索用表記ゆれ</label>
+            <input type="text" name="name_search" value="<?= h($name_search) ?>" placeholder="例：髙橋よしひろ / 渡邉まさこ 渡邊まさこ">
+            <div class="help">任意。表示名とは別に、検索で拾いたい表記をスペース区切りで入力します。</div>
         </div>
 
         <button type="submit">登録する</button>

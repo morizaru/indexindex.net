@@ -225,9 +225,11 @@ if ($q !== '') {
     $where[] = "(
         c.name LIKE :q_name
         OR c.name_kana LIKE :q_name_kana
+        OR c.name_search LIKE :q_name_search
     )";
     $params[':q_name'] = '%' . $q . '%';
     $params[':q_name_kana'] = '%' . $q . '%';
+    $params[':q_name_search'] = '%' . $q . '%';
 }
 
 if ($publisher_id > 0 || $magazine_id > 0 || $publication_year !== '') {
@@ -297,6 +299,7 @@ $sql = "
         c.id,
         c.name,
         c.name_kana,
+        c.name_search,
         COUNT(DISTINCT cc.content_id) AS content_count,
         c.created_at
     FROM creators c
@@ -497,6 +500,9 @@ $creators = $stmt->fetchAll();
                         <div class="small">
                             <?php if (!empty($row['name_kana'])): ?>
                                 かな: <?= h($row['name_kana']) ?><br>
+                            <?php endif; ?>
+                            <?php if (!empty($row['name_search'])): ?>
+                                検索用表記ゆれ: <?= h($row['name_search']) ?><br>
                             <?php endif; ?>
                             ID: <?= h($row['id']) ?><br>
                             作成: <?= h($row['created_at']) ?>

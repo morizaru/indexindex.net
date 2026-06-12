@@ -28,6 +28,7 @@ $stmt = $pdo->prepare("
         id,
         name,
         name_kana,
+        name_search,
         created_at
     FROM creators
     WHERE id = :id
@@ -44,14 +45,18 @@ if (!$creator) {
 
 $name = $creator['name'];
 $name_kana = $creator['name_kana'] ?? '';
+$name_search = $creator['name_search'] ?? '';
 
 // 更新処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $name_kana = trim($_POST['name_kana'] ?? '');
+    $name_search = trim($_POST['name_search'] ?? '');
 
     if ($name === '') {
         $error = '人物名を入力してください。';
+    } elseif (mb_strlen($name_search, 'UTF-8') > 255) {
+        $error = '検索用表記ゆれは255文字以内で入力してください。';
     } else {
         try {
             // 重複チェック
@@ -75,12 +80,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     UPDATE creators
                     SET
                         name = :name,
-                        name_kana = :name_kana
+                        name_kana = :name_kana,
+                        name_search = :name_search
                     WHERE id = :id
                 ");
                 $stmt->execute([
                     ':name' => $name,
                     ':name_kana' => ($name_kana !== '') ? $name_kana : null,
+                    ':name_search' => ($name_search !== '') ? $name_search : null,
                     ':id' => $creator_id
                 ]);
 
@@ -92,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         id,
                         name,
                         name_kana,
+                        name_search,
                         created_at
                     FROM creators
                     WHERE id = :id
@@ -104,6 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $name = $creator['name'];
                 $name_kana = $creator['name_kana'] ?? '';
+                $name_search = $creator['name_search'] ?? '';
             }
         } catch (Exception $e) {
             $error = '更新エラー：' . $e->getMessage();
@@ -307,6 +316,12 @@ $contents = $stmt->fetchAll();
             <label>人物名かな</label>
             <input type="text" name="name_kana" value="<?= h($name_kana) ?>" placeholder="例：ちばてつや / チバテツヤ">
             <div class="help">任意。検索・並び替え用に使えます。</div>
+        </div>
+
+        <div class="form-row">
+            <label>検索用表記ゆれ</label>
+            <input type="text" name="name_search" value="<?= h($name_search) ?>" placeholder="例：髙橋よしひろ / 渡邉まさこ 渡邊まさこ">
+            <div class="help">任意。表示名とは別に、検索で拾いたい表記をスペース区切りで入力します。</div>
         </div>
 
         <button type="submit">更新する</button>
