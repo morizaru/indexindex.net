@@ -19,8 +19,19 @@ $contentCount = null;
 
 try {
     if (isset($pdo) && $pdo instanceof PDO) {
-        $magazineCount = (int)$pdo->query("SELECT COUNT(*) FROM magazines")->fetchColumn();
-        $issueCount = (int)$pdo->query("SELECT COUNT(*) FROM magazine_issues WHERE status = 'approved'")->fetchColumn();
+        $magazineCount = (int)$pdo->query("
+            SELECT COUNT(DISTINCT m.id)
+            FROM magazines m
+            JOIN magazine_issues mi ON mi.magazine_id = m.id
+            JOIN issue_contents ic ON ic.issue_id = mi.id
+            WHERE mi.status = 'approved'
+        ")->fetchColumn();
+        $issueCount = (int)$pdo->query("
+            SELECT COUNT(DISTINCT mi.id)
+            FROM magazine_issues mi
+            JOIN issue_contents ic ON ic.issue_id = mi.id
+            WHERE mi.status = 'approved'
+        ")->fetchColumn();
         $workCount = (int)$pdo->query("SELECT COUNT(*) FROM works")->fetchColumn();
         $creatorCount = (int)$pdo->query("SELECT COUNT(*) FROM creators")->fetchColumn();
         $contentCount = (int)$pdo->query("
