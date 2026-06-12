@@ -148,10 +148,14 @@ $order_by_sql = $order_by_map[$sort];
 // 人物情報
 $stmt = $pdo->prepare("
     SELECT
-        id,
-        name
-    FROM creators
-    WHERE id = :id
+        c.id,
+        c.name,
+        c.name_kana,
+        c.debut_work_id,
+        w.title AS debut_work_title
+    FROM creators c
+    LEFT JOIN works w ON c.debut_work_id = w.id
+    WHERE c.id = :id
     LIMIT 1
 ");
 $stmt->execute([
@@ -340,6 +344,26 @@ $sort_labels = [
             line-height: 1.7;
         }
 
+        .creator-profile,
+        .creator-list-block {
+            border: 1px solid #e5e5e5;
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 18px;
+        }
+
+        .creator-profile {
+            margin-bottom: 18px;
+        }
+
+        .creator-profile h1 {
+            margin-bottom: 10px;
+        }
+
+        .creator-list-block {
+            background: #fff;
+        }
+
         .count {
             margin-bottom: 16px;
             color: #666;
@@ -495,6 +519,19 @@ $sort_labels = [
             margin-top: 4px;
         }
 
+        .creator-kana {
+            color: #555;
+            font-size: 0.95em;
+            line-height: 1.25;
+            margin-bottom: 0;
+        }
+
+        .debut-work {
+            color: #555;
+            font-size: 14px;
+            margin: -4px 0 0;
+        }
+
         .title-main {
             font-weight: bold;
         }
@@ -545,6 +582,11 @@ $sort_labels = [
             }
 
             .container {
+                padding: 12px;
+            }
+
+            .creator-profile,
+            .creator-list-block {
                 padding: 12px;
             }
 
@@ -627,7 +669,23 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="container">
 
-    <h1><?= h($creator['name']) ?></h1>
+    <section class="creator-profile" aria-label="人物プロフィール">
+        <?php $nameKana = trim((string)($creator['name_kana'] ?? '')); ?>
+        <?php if ($nameKana !== ''): ?>
+            <div class="creator-kana"><?= h($nameKana) ?></div>
+        <?php endif; ?>
+
+        <h1><?= h($creator['name']) ?></h1>
+
+        <?php if (!empty($creator['debut_work_id']) && !empty($creator['debut_work_title'])): ?>
+            <div class="debut-work">
+                デビュー作：
+                <a href="work.php?work_id=<?= h($creator['debut_work_id']) ?>"><?= h($creator['debut_work_title']) ?></a>
+            </div>
+        <?php endif; ?>
+    </section>
+
+    <section class="creator-list-block" aria-label="掲載リスト">
 
     <div class="condition-box">
         並び順：<?= h($sort_labels[$sort] ?? '雑誌・号') ?><?= h($dir === 'asc' ? ' 昇順' : ' 降順') ?>
@@ -844,6 +902,8 @@ require_once __DIR__ . '/includes/header.php';
             </form>
         </div>
     <?php endif; ?>
+
+    </section>
 
 </div>
 

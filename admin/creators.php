@@ -300,12 +300,15 @@ $sql = "
         c.name,
         c.name_kana,
         c.name_search,
+        c.debut_work_id,
+        dw.title AS debut_work_title,
         COUNT(DISTINCT cc.content_id) AS content_count,
         c.created_at
     FROM creators c
     LEFT JOIN content_creators cc ON c.id = cc.creator_id
+    LEFT JOIN works dw ON c.debut_work_id = dw.id
     {$where_sql}
-    GROUP BY c.id
+    GROUP BY c.id, c.name, c.name_kana, c.name_search, c.debut_work_id, dw.title, c.created_at
     ORDER BY c.name ASC
     LIMIT :limit OFFSET :offset
 ";
@@ -503,6 +506,9 @@ $creators = $stmt->fetchAll();
                             <?php endif; ?>
                             <?php if (!empty($row['name_search'])): ?>
                                 検索用表記ゆれ: <?= h($row['name_search']) ?><br>
+                            <?php endif; ?>
+                            <?php if (!empty($row['debut_work_title'])): ?>
+                                デビュー作: <?= h($row['debut_work_title']) ?><br>
                             <?php endif; ?>
                             ID: <?= h($row['id']) ?><br>
                             作成: <?= h($row['created_at']) ?>

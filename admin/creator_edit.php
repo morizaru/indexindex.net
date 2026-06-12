@@ -9,6 +9,20 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function get_work_title_by_id(PDO $pdo, $work_id) {
+    $stmt = $pdo->prepare("
+        SELECT title
+        FROM works
+        WHERE id = :id
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':id' => $work_id
+    ]);
+
+    return $stmt->fetchColumn();
+}
+
 $creator_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -25,13 +39,16 @@ $error = '';
 // 現在データ取得
 $stmt = $pdo->prepare("
     SELECT
-        id,
-        name,
-        name_kana,
-        name_search,
-        created_at
-    FROM creators
-    WHERE id = :id
+        c.id,
+        c.name,
+        c.name_kana,
+        c.name_search,
+        c.debut_work_id,
+        w.title AS debut_work_title,
+        c.created_at
+    FROM creators c
+    LEFT JOIN works w ON c.debut_work_id = w.id
+    WHERE c.id = :id
     LIMIT 1
 ");
 $stmt->execute([
@@ -46,48 +63,71 @@ if (!$creator) {
 $name = $creator['name'];
 $name_kana = $creator['name_kana'] ?? '';
 $name_search = $creator['name_search'] ?? '';
+$debut_work_id = $creator['debut_work_id'] ?? '';
+$debut_work_title = $creator['debut_work_title'] ?? '';
 
 // 更新処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $name_kana = trim($_POST['name_kana'] ?? '');
     $name_search = trim($_POST['name_search'] ?? '');
+    $debut_work_id_raw = trim($_POST['debut_work_id'] ?? '');
+    $debut_work_id = $debut_work_id_raw;
+    $debut_work_title = '';
 
     if ($name === '') {
         $error = '人物名を入力してください。';
     } elseif (mb_strlen($name_search, 'UTF-8') > 255) {
         $error = '検索用表記ゆれは255文字以内で入力してください。';
+    } elseif ($debut_work_id_raw !== '' && !preg_match('/^[0-9]+$/', $debut_work_id_raw)) {
+        $error = 'デビュー作IDは数値で入力してください。';
     } else {
         try {
-            // 重複チェック
-            $stmt = $pdo->prepare("
-                SELECT id
-                FROM creators
-                WHERE name = :name
-                  AND id <> :id
-                LIMIT 1
-            ");
-            $stmt->execute([
-                ':name' => $name,
-                ':id' => $creator_id
-            ]);
-            $exists = $stmt->fetch();
+            $debut_work_id_value = null;
+            if ($debut_work_id_raw !== '') {
+                $debut_work_id_value = (int)$debut_work_id_raw;
+                $debut_work_title = get_work_title_by_id($pdo, $debut_work_id_value);
 
-            if ($exists) {
-                $error = '同じ名前の人物がすでに登録されています。';
-            } else {
+                if ($debut_work_title === false) {
+                    $error = '指定されたデビュー作IDの作品が見つかりません。';
+                }
+            }
+
+            // 重複チェック
+            if ($error === '') {
+                $stmt = $pdo->prepare("
+                    SELECT id
+                    FROM creators
+                    WHERE name = :name
+                      AND id <> :id
+                    LIMIT 1
+                ");
+                $stmt->execute([
+                    ':name' => $name,
+                    ':id' => $creator_id
+                ]);
+                $exists = $stmt->fetch();
+
+                if ($exists) {
+                    $error = '同じ名前の人物がすでに登録されています。';
+                }
+            }
+
+            if ($error === '') {
                 $stmt = $pdo->prepare("
                     UPDATE creators
                     SET
                         name = :name,
                         name_kana = :name_kana,
-                        name_search = :name_search
+                        name_search = :name_search,
+                        debut_work_id = :debut_work_id
                     WHERE id = :id
                 ");
                 $stmt->execute([
                     ':name' => $name,
                     ':name_kana' => ($name_kana !== '') ? $name_kana : null,
                     ':name_search' => ($name_search !== '') ? $name_search : null,
+                    ':debut_work_id' => $debut_work_id_value,
                     ':id' => $creator_id
                 ]);
 
@@ -96,13 +136,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // 再取得
                 $stmt = $pdo->prepare("
                     SELECT
-                        id,
-                        name,
-                        name_kana,
-                        name_search,
-                        created_at
-                    FROM creators
-                    WHERE id = :id
+                        c.id,
+                        c.name,
+                        c.name_kana,
+                        c.name_search,
+                        c.debut_work_id,
+                        w.title AS debut_work_title,
+                        c.created_at
+                    FROM creators c
+                    LEFT JOIN works w ON c.debut_work_id = w.id
+                    WHERE c.id = :id
                     LIMIT 1
                 ");
                 $stmt->execute([
@@ -113,6 +156,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $name = $creator['name'];
                 $name_kana = $creator['name_kana'] ?? '';
                 $name_search = $creator['name_search'] ?? '';
+                $debut_work_id = $creator['debut_work_id'] ?? '';
+                $debut_work_title = $creator['debut_work_title'] ?? '';
             }
         } catch (Exception $e) {
             $error = '更新エラー：' . $e->getMessage();
@@ -155,6 +200,40 @@ $stmt->execute([
     ':creator_id' => $creator_id
 ]);
 $contents = $stmt->fetchAll();
+
+$stmt = $pdo->prepare("
+    SELECT DISTINCT
+        w.id,
+        w.title,
+        w.title_sub
+    FROM content_creators cc
+    JOIN issue_contents ic ON cc.content_id = ic.id
+    JOIN works w ON ic.work_id = w.id
+    WHERE cc.creator_id = :creator_id
+    ORDER BY w.title ASC, w.title_sub ASC, w.id ASC
+");
+$stmt->execute([
+    ':creator_id' => $creator_id
+]);
+$work_options = $stmt->fetchAll();
+
+if ($debut_work_id !== '') {
+    $has_debut_work_option = false;
+    foreach ($work_options as $work_option) {
+        if ((int)$work_option['id'] === (int)$debut_work_id) {
+            $has_debut_work_option = true;
+            break;
+        }
+    }
+
+    if (!$has_debut_work_option && $debut_work_title !== '' && $debut_work_title !== false) {
+        array_unshift($work_options, [
+            'id' => $debut_work_id,
+            'title' => $debut_work_title,
+            'title_sub' => '',
+        ]);
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -220,6 +299,12 @@ $contents = $stmt->fetchAll();
             color: #666;
             font-size: 13px;
             line-height: 1.5;
+        }
+
+        .work-select-tools {
+            display: grid;
+            gap: 6px;
+            max-width: 520px;
         }
 
         .role {
@@ -324,6 +409,42 @@ $contents = $stmt->fetchAll();
             <div class="help">任意。表示名とは別に、検索で拾いたい表記をスペース区切りで入力します。</div>
         </div>
 
+        <div class="form-row">
+            <label>デビュー作</label>
+            <div class="work-select-tools">
+                <input type="search" class="work-search-input" placeholder="この人物に紐づく作品名で絞り込み">
+                <select name="debut_work_id" class="work-select">
+                    <option value="">未登録</option>
+                    <?php foreach ($work_options as $work_option): ?>
+                        <?php
+                            $work_label = (string)$work_option['title'];
+                            if (!empty($work_option['title_sub'])) {
+                                $work_label .= ' / ' . (string)$work_option['title_sub'];
+                            }
+                        ?>
+                        <option
+                            value="<?= h($work_option['id']) ?>"
+                            data-search="<?= h($work_option['id'] . ' ' . $work_label) ?>"
+                            <?= ((string)$debut_work_id === (string)$work_option['id']) ? 'selected' : '' ?>
+                        >
+                            <?= h($work_label) ?>（ID: <?= h($work_option['id']) ?>）
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="help">この人物に紐づく作品から選択できます。未登録にする場合は「未登録」を選んでください。</div>
+            <div class="small">
+                現在のデビュー作：
+                <?php if (trim((string)$debut_work_id) === ''): ?>
+                    未登録
+                <?php elseif ($debut_work_title !== '' && $debut_work_title !== false): ?>
+                    <?= h($debut_work_title) ?>
+                <?php else: ?>
+                    作品が見つかりません
+                <?php endif; ?>
+            </div>
+        </div>
+
         <button type="submit">更新する</button>
 
     </form>
@@ -384,5 +505,34 @@ $contents = $stmt->fetchAll();
     <?php endif; ?>
 
 </div>
+<script>
+document.querySelectorAll('.work-select-tools').forEach((wrap) => {
+    const input = wrap.querySelector('.work-search-input');
+    const select = wrap.querySelector('.work-select');
+    const options = Array.from(select.options);
+
+    if (!input || !select) {
+        return;
+    }
+
+    input.addEventListener('input', () => {
+        const keyword = input.value.trim().toLowerCase();
+
+        options.forEach((option) => {
+            if (option.value === '') {
+                option.hidden = false;
+                option.disabled = false;
+                option.style.display = '';
+                return;
+            }
+
+            const isHidden = keyword !== '' && !option.dataset.search.toLowerCase().includes(keyword);
+            option.hidden = isHidden;
+            option.disabled = isHidden;
+            option.style.display = isHidden ? 'none' : '';
+        });
+    });
+});
+</script>
 </body>
 </html>
