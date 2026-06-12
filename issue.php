@@ -298,6 +298,7 @@ $sql_issue = "
         mi.id,
         mi.magazine_id,
         mi.issue_label,
+        mi.issue_label_special,
         mi.publication_date,
         mi.publication_year,
         mi.publication_month,
@@ -479,7 +480,12 @@ foreach ($contents as $content_row) {
 
 $issue_summary['creator_count'] = count($issue_summary['creator_ids']);
 
-$issue_description_name = trim((string)($issue['magazine_name'] ?? '') . ' ' . (string)($issue['issue_label'] ?? ''));
+$issue_label_special = trim((string)($issue['issue_label_special'] ?? ''));
+$issue_display_name = trim((string)($issue['magazine_name'] ?? '') . ' ' . (string)($issue['issue_label'] ?? ''));
+if ($issue_label_special !== '') {
+    $issue_display_name .= '（' . $issue_label_special . '）';
+}
+$issue_description_name = $issue_display_name;
 $issue_description_date = format_issue_description_date($issue);
 ?>
 <!DOCTYPE html>
@@ -487,7 +493,7 @@ $issue_description_date = format_issue_description_date($issue);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= h($issue['magazine_name']) ?> <?= h($issue['issue_label']) ?> - INDEXINDEX</title>
+    <title><?= h($issue_display_name) ?> - INDEXINDEX</title>
 
     <style>
         body {
@@ -777,7 +783,7 @@ require_once __DIR__ . '/includes/header.php';
             >▼</a>
         <?php endif; ?>
 
-        <span class="issue-title-text"><?= h($issue['magazine_name']) ?> <?= h($issue['issue_label']) ?></span>
+        <span class="issue-title-text"><?= h($issue_display_name) ?></span>
 
         <?php if ($newer_issue): ?>
             <a
