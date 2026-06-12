@@ -160,7 +160,7 @@ function split_creator_names($creator_name) {
 
     foreach ($parts as $part) {
         $part = trim($part);
-        $part = preg_replace('/^(原作|作画|漫画|構成|脚本|協力|監修)：/u', '', $part);
+        $part = preg_replace('/^(' . creator_role_label_pattern_bulk() . ')\s*[:：]\s*/u', '', $part);
         $part = trim($part);
 
         if ($part !== '') {
@@ -171,26 +171,83 @@ function split_creator_names($creator_name) {
     return array_values(array_unique($names));
 }
 
+function creator_role_labels_bulk() {
+    return [
+        '漫画・キャラクター原案',
+        'キャラクター原案',
+        '作画協力',
+        '原作',
+        '作画',
+        '漫画',
+        '構成',
+        '脚本',
+        '協力',
+        '監修',
+        '作者',
+        '画',
+        '作',
+        '文',
+        '絵',
+        '著',
+    ];
+}
+
+function creator_role_label_pattern_bulk() {
+    return implode('|', array_map(function ($label) {
+        return preg_quote($label, '/');
+    }, creator_role_labels_bulk()));
+}
+
+// 確認例: 画:手塚治虫 作:石ノ森章太郎 / 画 手塚治虫 作 石ノ森章太郎 / 宮島礼吏 作画協力:雪野れいじ
 function split_creator_roles_bulk($creator_name) {
     $creator_name = trim((string)$creator_name);
     if ($creator_name === '') {
         return [];
     }
 
+    $role_pattern = creator_role_label_pattern_bulk();
     $items = [];
-    $pattern = '/(?:^|[\s　]+)([^:：\s　]+)\s*[:：]\s*(.*?)(?=(?:[\s　]+[^:：\s　]+\s*[:：])|$)/u';
+    $pattern = '/(' . $role_pattern . ')\s*(?:[:：]\s*|[\s　]+)/u';
 
-    if (!preg_match_all($pattern, $creator_name, $matches, PREG_SET_ORDER)) {
+    if (!preg_match_all($pattern, $creator_name, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
         return [];
     }
 
-    foreach ($matches as $match) {
-        $role = trim($match[1]);
-        $name = trim($match[2]);
+    $seen = [];
+    $first_role_pos = $matches[0][0][1];
+    $prefix = trim(substr($creator_name, 0, $first_role_pos));
+
+    if ($prefix !== '') {
+        foreach (split_creator_names($prefix) as $prefix_name) {
+            $key = "author\n" . $prefix_name;
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+
+            $items[] = [
+                'name' => $prefix_name,
+                'role' => 'author',
+            ];
+        }
+    }
+
+    foreach ($matches as $index => $match) {
+        $role = trim($match[1][0]);
+        $name_start = $match[0][1] + strlen($match[0][0]);
+        $name_end = isset($matches[$index + 1]) ? $matches[$index + 1][0][1] : strlen($creator_name);
+        $name = trim(substr($creator_name, $name_start, $name_end - $name_start));
+        $name = preg_replace('/\s+/u', ' ', $name);
 
         if ($name === '') {
             continue;
         }
+
+        $key = $role . "\n" . $name;
+        if (isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
 
         $items[] = [
             'name' => $name,
