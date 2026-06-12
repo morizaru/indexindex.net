@@ -12,6 +12,18 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function kana_like_values($value) {
+    $value = (string)$value;
+    $hira = function_exists('mb_convert_kana') ? mb_convert_kana($value, 'c', 'UTF-8') : $value;
+    $kata = function_exists('mb_convert_kana') ? mb_convert_kana($value, 'C', 'UTF-8') : $value;
+
+    return [
+        'base' => '%' . $value . '%',
+        'hira' => '%' . $hira . '%',
+        'kata' => '%' . $kata . '%',
+    ];
+}
+
 // 1〜9999程度までの整数を漢数字に変換
 function number_to_kanji($number) {
     $number = (int)$number;
@@ -256,17 +268,28 @@ if ($keyword !== '') {
               JOIN creators c_kw ON cc_kw.creator_id = c_kw.id
               WHERE cc_kw.content_id = ic.id
                 AND cc_kw.is_visible = 1
-                AND c_kw.name LIKE :keyword_creator
+                AND (
+                    c_kw.name LIKE :keyword_creator
+                    OR c_kw.name_search LIKE :keyword_creator_search
+                    OR c_kw.name_kana LIKE :keyword_creator_kana
+                    OR c_kw.name_kana LIKE :keyword_creator_kana_hira
+                    OR c_kw.name_kana LIKE :keyword_creator_kana_kata
+                )
           )
       )
     ";
     $keyword_like = '%' . $keyword . '%';
+    $keyword_kana_likes = kana_like_values($keyword);
     $keyword_params = [
         ':keyword_work_title' => $keyword_like,
         ':keyword_work_title_sub' => $keyword_like,
         ':keyword_content_title' => $keyword_like,
         ':keyword_magazine' => $keyword_like,
         ':keyword_creator' => $keyword_like,
+        ':keyword_creator_search' => $keyword_like,
+        ':keyword_creator_kana' => $keyword_kana_likes['base'],
+        ':keyword_creator_kana_hira' => $keyword_kana_likes['hira'],
+        ':keyword_creator_kana_kata' => $keyword_kana_likes['kata'],
     ];
 }
 

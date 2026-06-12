@@ -16,6 +16,18 @@ function selected_attr($value, $current) {
     return $value === $current ? ' checked' : '';
 }
 
+function kana_like_values($value) {
+    $value = (string)$value;
+    $hira = function_exists('mb_convert_kana') ? mb_convert_kana($value, 'c', 'UTF-8') : $value;
+    $kata = function_exists('mb_convert_kana') ? mb_convert_kana($value, 'C', 'UTF-8') : $value;
+
+    return [
+        'base' => '%' . $value . '%',
+        'hira' => '%' . $hira . '%',
+        'kata' => '%' . $kata . '%',
+    ];
+}
+
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $target = isset($_GET['target']) ? trim((string)$_GET['target']) : 'all';
 
@@ -133,7 +145,13 @@ if ($q !== '') {
             LEFT JOIN magazine_issues mi
                 ON mi.id = ic.issue_id
                AND mi.status = 'approved'
-            WHERE c.name LIKE :keyword
+            WHERE (
+                c.name LIKE :keyword_name
+                OR c.name_search LIKE :keyword_name_search
+                OR c.name_kana LIKE :keyword_name_kana
+                OR c.name_kana LIKE :keyword_name_kana_hira
+                OR c.name_kana LIKE :keyword_name_kana_kata
+            )
             GROUP BY
                 c.id,
                 c.name
@@ -144,7 +162,14 @@ if ($q !== '') {
         ";
 
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([':keyword' => $keyword]);
+        $keyword_kana_likes = kana_like_values($q);
+        $stmt->execute([
+            ':keyword_name' => $keyword,
+            ':keyword_name_search' => $keyword,
+            ':keyword_name_kana' => $keyword_kana_likes['base'],
+            ':keyword_name_kana_hira' => $keyword_kana_likes['hira'],
+            ':keyword_name_kana_kata' => $keyword_kana_likes['kata'],
+        ]);
         if ($target === 'all') {
             $all_results['creator'] = $stmt->fetchAll();
         } else {
