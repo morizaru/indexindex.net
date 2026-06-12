@@ -12,6 +12,17 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function issue_label_with_special($issue) {
+    $label = (string)($issue['issue_label'] ?? '');
+    $special_label = trim((string)($issue['issue_label_special'] ?? ''));
+
+    if ($special_label !== '') {
+        $label .= '（' . $special_label . '）';
+    }
+
+    return $label;
+}
+
 function build_issue_page_url($page, $magazine_id, $publisher_id, $year, $keyword, $sort, $direction, $filter_magazine_id = null, $publisher_keyword = null, $magazine_keyword = null, $year_keyword = null) {
     if ($filter_magazine_id === null) {
         $filter_magazine_id = $GLOBALS['filter_magazine_id'] ?? 0;
@@ -355,6 +366,7 @@ if ($keyword !== '') {
     $where[] = "(
         m.name LIKE :keyword_magazine
         OR mi.issue_label LIKE :keyword_issue_label
+        OR mi.issue_label_special LIKE :keyword_issue_label_special
         OR w.title LIKE :keyword_work_title
         OR w.title_sub LIKE :keyword_work_title_sub
         OR ic.title_main LIKE :keyword_content_title
@@ -363,6 +375,7 @@ if ($keyword !== '') {
     $keyword_like = '%' . $keyword . '%';
     $params[':keyword_magazine'] = $keyword_like;
     $params[':keyword_issue_label'] = $keyword_like;
+    $params[':keyword_issue_label_special'] = $keyword_like;
     $params[':keyword_work_title'] = $keyword_like;
     $params[':keyword_work_title_sub'] = $keyword_like;
     $params[':keyword_content_title'] = $keyword_like;
@@ -530,6 +543,7 @@ if ($magazine_id > 0) {
           AND (
               m.name LIKE :issue_keyword_magazine
               OR mi.issue_label LIKE :issue_keyword_label
+              OR mi.issue_label_special LIKE :issue_keyword_label_special
               OR EXISTS (
                   SELECT 1
                   FROM issue_contents ic_kw
@@ -550,6 +564,7 @@ if ($magazine_id > 0) {
         $issue_keyword_params = [
             ':issue_keyword_magazine' => $issue_keyword_like,
             ':issue_keyword_label' => $issue_keyword_like,
+            ':issue_keyword_label_special' => $issue_keyword_like,
             ':issue_keyword_work_title' => $issue_keyword_like,
             ':issue_keyword_work_title_sub' => $issue_keyword_like,
             ':issue_keyword_content_title' => $issue_keyword_like,
@@ -592,6 +607,7 @@ if ($magazine_id > 0) {
         SELECT
             mi.id,
             mi.issue_label,
+            mi.issue_label_special,
             mi.issue_year,
             mi.issue_no,
             mi.publication_date,
@@ -1550,7 +1566,7 @@ require_once __DIR__ . '/includes/header.php';
                         <tr>
                             <td class="issue">
                                 <a href="issue.php?id=<?= h($row['id']) ?>">
-                                    <?= h($row['issue_label']) ?>
+                                    <?= h(issue_label_with_special($row)) ?>
                                 </a>
 
                                 <div class="issue-meta">

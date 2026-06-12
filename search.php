@@ -69,7 +69,11 @@ if ($q !== '') {
             LEFT JOIN magazine_issues mi
                 ON mi.magazine_id = m.id
                AND mi.status = 'approved'
-            WHERE m.name LIKE :keyword
+            WHERE (
+                m.name LIKE :keyword
+                OR mi.issue_label LIKE :keyword_issue_label
+                OR mi.issue_label_special LIKE :keyword_issue_label_special
+            )
             GROUP BY
                 m.id,
                 m.name,
@@ -81,7 +85,11 @@ if ($q !== '') {
         ";
 
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([':keyword' => $keyword]);
+        $stmt->execute([
+            ':keyword' => $keyword,
+            ':keyword_issue_label' => $keyword,
+            ':keyword_issue_label_special' => $keyword,
+        ]);
         if ($target === 'all') {
             $all_results['magazine'] = $stmt->fetchAll();
         } else {
