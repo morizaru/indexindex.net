@@ -102,6 +102,10 @@ function get_content_badges($row) {
         $badges[] = ['label' => '最終回', 'class' => 'badge-final'];
     }
 
+    if (!empty($row['is_debut_work'])) {
+        $badges[] = ['label' => 'デビュー作', 'class' => 'badge-debut'];
+    }
+
     return $badges;
 }
 
@@ -430,7 +434,15 @@ $sql_contents = "
             )
             ORDER BY cc.display_order
             SEPARATOR '||CREATOR||'
-        ) AS creators_data
+        ) AS creators_data,
+        MAX(
+            CASE
+                WHEN c.debut_work_id IS NOT NULL
+                     AND c.debut_work_id = w.id
+                THEN 1
+                ELSE 0
+            END
+        ) AS is_debut_work
     FROM issue_contents ic
     LEFT JOIN works w ON ic.work_id = w.id
     LEFT JOIN episode_formats cef ON ic.episode_format_id = cef.id
@@ -517,7 +529,8 @@ $issue_description_date = format_issue_description_date($issue);
 
         h1 {
             margin-top: 0;
-            font-size: 28px;
+            margin-bottom: 20px;
+            line-height: 1.3;
         }
 
         .issue-title-nav {
@@ -707,6 +720,12 @@ $issue_description_date = format_issue_description_date($issue);
             border: 1px solid #ffb8c2;
         }
 
+        .badge-debut {
+            background: #eaf8ef;
+            color: #16743a;
+            border: 1px solid #a9dfb8;
+        }
+
         .title-sub {
             color: #666;
             font-size: 13px;
@@ -764,8 +783,10 @@ $issue_description_date = format_issue_description_date($issue);
             }
         }
     </style>
+
+    <link rel="stylesheet" href="assets/css/common.css">
 </head>
-<body>
+<body id="top">
 
 <?php
 $current_page = 'issue';
