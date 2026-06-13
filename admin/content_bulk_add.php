@@ -155,7 +155,7 @@ function split_creator_names($creator_name) {
 
     $creator_name = str_replace(['／', '・'], ['/', '・'], $creator_name);
 
-    $parts = preg_split('/\s*[\/、]\s*/u', $creator_name);
+    $parts = preg_split('/\s*(?:[\/、]|\s+)\s*/u', $creator_name);
     $names = [];
 
     foreach ($parts as $part) {
@@ -1325,6 +1325,11 @@ if ($issue_id > 0) {
                     const row = input.closest('tr');
                     if (row) {
                         hideCreatorAutofillNote(row);
+
+                        const creatorsJsonInput = row.querySelector('input[name$="[creators_json]"]');
+                        if (creatorsJsonInput) {
+                            creatorsJsonInput.value = '[]';
+                        }
                     }
                 });
             });
