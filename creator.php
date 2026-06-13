@@ -176,6 +176,7 @@ if ($keyword !== '') {
           OR w.title LIKE :keyword_work_title
           OR w.title_sub LIKE :keyword_work_title_sub
           OR ic.title_main LIKE :keyword_content_title
+          OR mi.issue_label LIKE :keyword_issue_label
           OR m.name LIKE :keyword_magazine
       )
     ";
@@ -185,6 +186,7 @@ if ($keyword !== '') {
         ':keyword_work_title' => $keyword_like,
         ':keyword_work_title_sub' => $keyword_like,
         ':keyword_content_title' => $keyword_like,
+        ':keyword_issue_label' => $keyword_like,
         ':keyword_magazine' => $keyword_like,
     ];
 }
@@ -372,6 +374,8 @@ $sort_labels = [
 
         .filter-box {
             margin-bottom: 16px;
+            display: flex;
+            gap: 8px;
         }
 
         .filter-box input {
@@ -381,6 +385,30 @@ $sort_labels = [
             font-size: 16px;
             border: 1px solid #ccc;
             border-radius: 4px;
+        }
+
+        .filter-box button,
+        .filter-box a {
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .filter-box button {
+            border: 1px solid #333;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .filter-box a {
+            border: 1px solid #ddd;
+            background: #fff;
+            color: #0066cc;
+            text-decoration: none;
         }
 
         .pagination {
@@ -612,6 +640,14 @@ $sort_labels = [
                 width: auto;
             }
 
+            .filter-box {
+                flex-wrap: wrap;
+            }
+
+            .filter-box input {
+                flex: 1 1 100%;
+            }
+
             table, thead, tbody, tr, th, td {
                 display: block;
             }
@@ -688,6 +724,7 @@ require_once __DIR__ . '/includes/header.php';
     <section class="creator-list-block" aria-label="掲載リスト">
 
     <div class="condition-box">
+        キーワード：<?= h($keyword !== '' ? $keyword : '指定なし') ?> /
         並び順：<?= h($sort_labels[$sort] ?? '雑誌・号') ?><?= h($dir === 'asc' ? ' 昇順' : ' 降順') ?>
     </div>
 
@@ -758,9 +795,20 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     <?php endif; ?>
 
-    <div class="filter-box">
-        <input type="text" id="contentFilter" placeholder="このページ内を雑誌名・号・タイトルで絞り込み">
-    </div>
+    <form method="get" action="creator.php" class="filter-box">
+        <input type="hidden" name="creator_id" value="<?= h($creator_id) ?>">
+        <?php if ($sort !== 'issue'): ?>
+            <input type="hidden" name="sort" value="<?= h($sort) ?>">
+        <?php endif; ?>
+        <?php if ($dir !== 'asc'): ?>
+            <input type="hidden" name="dir" value="<?= h($dir) ?>">
+        <?php endif; ?>
+        <input type="text" name="keyword" value="<?= h($keyword) ?>" placeholder="全データから雑誌名・号・タイトルで絞り込み">
+        <button type="submit">絞り込み</button>
+        <?php if ($keyword !== ''): ?>
+            <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, '')) ?>">解除</a>
+        <?php endif; ?>
+    </form>
 
     <?php if (empty($contents)): ?>
 
@@ -912,26 +960,6 @@ require_once __DIR__ . '/includes/header.php';
 <a href="#top" class="top-button" id="topButton" aria-label="TOPへ戻る">TOP</a>
 
 <script>
-const filterInput = document.getElementById('contentFilter');
-const table = document.getElementById('contentsTable');
-
-if (filterInput && table) {
-    filterInput.addEventListener('input', () => {
-        const keyword = filterInput.value.trim().toLowerCase();
-        const rows = table.querySelectorAll('tbody tr');
-
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-
-            if (!keyword || text.includes(keyword)) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
-    });
-}
-
 const topButton = document.getElementById('topButton');
 
 function toggleTopButton() {
