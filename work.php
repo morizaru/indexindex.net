@@ -480,7 +480,8 @@ function format_episode_no($row, $work) {
 
         h1 {
             margin-top: 0;
-            margin-bottom: 8px;
+            margin-bottom: 20px;
+            line-height: 1.3;
         }
 
         .work-sub {
@@ -683,8 +684,10 @@ function format_episode_no($row, $work) {
             td.note-cell::before { content: "備考"; }
         }
     </style>
+
+    <link rel="stylesheet" href="assets/css/common.css">
 </head>
-<body>
+<body id="top">
 
 <?php
 $current_page = 'work';

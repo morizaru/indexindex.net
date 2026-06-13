@@ -44,6 +44,21 @@ function build_issue_page_url($page, $magazine_id, $publisher_id, $year, $keywor
 
     if ($magazine_id > 0) {
         $query['magazine_id'] = $magazine_id;
+
+        if ($year > 0) {
+            $query['year'] = $year;
+        }
+
+        if ($keyword !== '') {
+            $query['keyword'] = $keyword;
+        }
+
+        if ($page > 1) {
+            $query['page'] = $page;
+        }
+
+        $query_string = http_build_query($query);
+        return 'issues.php' . ($query_string !== '' ? '?' . $query_string : '');
     }
 
     if ($filter_magazine_id > 0) {
@@ -387,65 +402,67 @@ if (!empty($where)) {
     $where_sql = 'WHERE ' . implode(' AND ', $where);
 }
 
-$count_magazines_sql = "
-    SELECT COUNT(DISTINCT m.id) AS total_count
-    FROM magazines m
-    JOIN publishers p ON m.publisher_id = p.id
-    JOIN magazine_issues mi ON m.id = mi.magazine_id
-    JOIN issue_contents ic ON mi.id = ic.issue_id
-    LEFT JOIN works w ON ic.work_id = w.id
-    LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
-    LEFT JOIN creators c ON cc.creator_id = c.id
-    {$where_sql}
-";
-$stmt = $pdo->prepare($count_magazines_sql);
-$stmt->execute($params);
-$total_magazines = (int)($stmt->fetch()['total_count'] ?? 0);
-$total_pages = max(1, (int)ceil($total_magazines / $perPage));
+if ($magazine_id <= 0) {
+    $count_magazines_sql = "
+        SELECT COUNT(DISTINCT m.id) AS total_count
+        FROM magazines m
+        JOIN publishers p ON m.publisher_id = p.id
+        JOIN magazine_issues mi ON m.id = mi.magazine_id
+        JOIN issue_contents ic ON mi.id = ic.issue_id
+        LEFT JOIN works w ON ic.work_id = w.id
+        LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
+        LEFT JOIN creators c ON cc.creator_id = c.id
+        {$where_sql}
+    ";
+    $stmt = $pdo->prepare($count_magazines_sql);
+    $stmt->execute($params);
+    $total_magazines = (int)($stmt->fetch()['total_count'] ?? 0);
+    $total_pages = max(1, (int)ceil($total_magazines / $perPage));
 
-if ($page > $total_pages) {
-    $page = $total_pages;
-}
-
-$offset = ($page - 1) * $perPage;
-$from_count = $total_magazines > 0 ? $offset + 1 : 0;
-$to_count = min($offset + $perPage, $total_magazines);
-
-// 雑誌一覧
-$sql_magazines = "
-    SELECT
-        m.id,
-        m.name AS magazine_name,
-        p.name AS publisher_name,
-        COUNT(DISTINCT mi.id) AS issue_count,
-        COUNT(DISTINCT ic.id) AS content_count,
-        MIN({$publication_year_sql}) AS first_year,
-        MAX({$publication_year_sql}) AS last_year
-    FROM magazines m
-    JOIN publishers p ON m.publisher_id = p.id
-    JOIN magazine_issues mi ON m.id = mi.magazine_id
-    JOIN issue_contents ic ON mi.id = ic.issue_id
-    LEFT JOIN works w ON ic.work_id = w.id
-    LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
-    LEFT JOIN creators c ON cc.creator_id = c.id
-    {$where_sql}
-    GROUP BY m.id, m.name, p.name
-    HAVING content_count > 0
-    ORDER BY {$magazine_order_sql}
-    LIMIT :limit OFFSET :offset
-";
-$stmt = $pdo->prepare($sql_magazines);
-foreach ($params as $param_name => $param_value) {
-    if (strpos($param_name, ':keyword_') === 0) {
-        $stmt->bindValue($param_name, $param_value, PDO::PARAM_STR);
-    } else {
-        $stmt->bindValue($param_name, $param_value, PDO::PARAM_INT);
+    if ($page > $total_pages) {
+        $page = $total_pages;
     }
+
+    $offset = ($page - 1) * $perPage;
+    $from_count = $total_magazines > 0 ? $offset + 1 : 0;
+    $to_count = min($offset + $perPage, $total_magazines);
+
+    // 雑誌一覧
+    $sql_magazines = "
+        SELECT
+            m.id,
+            m.name AS magazine_name,
+            p.name AS publisher_name,
+            COUNT(DISTINCT mi.id) AS issue_count,
+            COUNT(DISTINCT ic.id) AS content_count,
+            MIN({$publication_year_sql}) AS first_year,
+            MAX({$publication_year_sql}) AS last_year
+        FROM magazines m
+        JOIN publishers p ON m.publisher_id = p.id
+        JOIN magazine_issues mi ON m.id = mi.magazine_id
+        JOIN issue_contents ic ON mi.id = ic.issue_id
+        LEFT JOIN works w ON ic.work_id = w.id
+        LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
+        LEFT JOIN creators c ON cc.creator_id = c.id
+        {$where_sql}
+        GROUP BY m.id, m.name, p.name
+        HAVING content_count > 0
+        ORDER BY {$magazine_order_sql}
+        LIMIT :limit OFFSET :offset
+    ";
+    $stmt = $pdo->prepare($sql_magazines);
+    foreach ($params as $param_name => $param_value) {
+        if (strpos($param_name, ':keyword_') === 0) {
+            $stmt->bindValue($param_name, $param_value, PDO::PARAM_STR);
+        } else {
+            $stmt->bindValue($param_name, $param_value, PDO::PARAM_INT);
+        }
+    }
+    $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $magazines = $stmt->fetchAll();
 }
-$stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt->execute();
-$magazines = $stmt->fetchAll();
 
 $selected_publisher_name = '';
 $selected_filter_magazine_name = '';
@@ -1156,11 +1173,23 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="container">
 
-    <h1>雑誌一覧</h1>
+    <?php if ($magazine_id <= 0): ?>
+        <h1>雑誌一覧</h1>
 
-    <div class="description-box">
-        目次が登録されている漫画雑誌と雑誌号を一覧できます。出版社、発行年、雑誌名で絞り込み、各号の掲載作品数や目次ページへ進めます。
-    </div>
+        <div class="description-box">
+            目次が登録されている漫画雑誌と雑誌号を一覧できます。出版社、発行年、雑誌名で絞り込み、各号の掲載作品数や目次ページへ進めます。
+        </div>
+    <?php elseif ($current_magazine): ?>
+        <h1><?= h($current_magazine['magazine_name']) ?></h1>
+
+        <div class="small">
+            出版社：<?= h($current_magazine['publisher_name']) ?>
+        </div>
+
+        <div class="nav" style="margin-top: 16px;">
+            <a href="issues.php">雑誌一覧へ戻る</a>
+        </div>
+    <?php endif; ?>
 
     <?php if ($magazine_id <= 0): ?>
 
@@ -1453,18 +1482,6 @@ require_once __DIR__ . '/includes/header.php';
 
         <?php else: ?>
 
-            <h2>
-                <?= h($current_magazine['magazine_name']) ?>
-            </h2>
-
-            <div class="small">
-                出版社：<?= h($current_magazine['publisher_name']) ?>
-            </div>
-
-            <div class="nav" style="margin-top: 16px;">
-                <a href="issues.php">雑誌一覧へ戻る</a>
-            </div>
-
             <div class="count">
                 全<?= h($total_issues) ?>号中 <?= h($from_count) ?>～<?= h($to_count) ?>件を表示<br>
                 <?= h($page) ?> / <?= h($total_pages) ?>ページ、1ページ<?= h($perPage) ?>件
@@ -1517,29 +1534,8 @@ require_once __DIR__ . '/includes/header.php';
 
                     <form method="get" action="issues.php" class="page-jump">
                         <input type="hidden" name="magazine_id" value="<?= h($magazine_id) ?>">
-                        <?php if ($filter_magazine_id > 0): ?>
-                            <input type="hidden" name="filter_magazine_id" value="<?= h($filter_magazine_id) ?>">
-                        <?php endif; ?>
-                        <?php if ($publisher_id > 0): ?>
-                            <input type="hidden" name="publisher_id" value="<?= h($publisher_id) ?>">
-                        <?php endif; ?>
                         <?php if ($year > 0): ?>
                             <input type="hidden" name="year" value="<?= h($year) ?>">
-                        <?php endif; ?>
-                        <?php if ($publisher_keyword !== ''): ?>
-                            <input type="hidden" name="publisher_keyword" value="<?= h($publisher_keyword) ?>">
-                        <?php endif; ?>
-                        <?php if ($magazine_keyword !== ''): ?>
-                            <input type="hidden" name="magazine_keyword" value="<?= h($magazine_keyword) ?>">
-                        <?php endif; ?>
-                        <?php if ($year_keyword !== ''): ?>
-                            <input type="hidden" name="year_keyword" value="<?= h($year_keyword) ?>">
-                        <?php endif; ?>
-                        <?php if ($sort !== 'magazine'): ?>
-                            <input type="hidden" name="sort" value="<?= h($sort) ?>">
-                        <?php endif; ?>
-                        <?php if ($direction !== 'asc'): ?>
-                            <input type="hidden" name="direction" value="<?= h($direction) ?>">
                         <?php endif; ?>
                         <input type="number" name="page" min="1" max="<?= h($total_pages) ?>" value="<?= h($page) ?>" aria-label="ページ番号">
                         <button type="submit">移動</button>
@@ -1641,29 +1637,8 @@ require_once __DIR__ . '/includes/header.php';
 
                         <form method="get" action="issues.php" class="page-jump">
                             <input type="hidden" name="magazine_id" value="<?= h($magazine_id) ?>">
-                            <?php if ($filter_magazine_id > 0): ?>
-                                <input type="hidden" name="filter_magazine_id" value="<?= h($filter_magazine_id) ?>">
-                            <?php endif; ?>
-                            <?php if ($publisher_id > 0): ?>
-                                <input type="hidden" name="publisher_id" value="<?= h($publisher_id) ?>">
-                            <?php endif; ?>
                             <?php if ($year > 0): ?>
                                 <input type="hidden" name="year" value="<?= h($year) ?>">
-                            <?php endif; ?>
-                            <?php if ($publisher_keyword !== ''): ?>
-                                <input type="hidden" name="publisher_keyword" value="<?= h($publisher_keyword) ?>">
-                            <?php endif; ?>
-                            <?php if ($magazine_keyword !== ''): ?>
-                                <input type="hidden" name="magazine_keyword" value="<?= h($magazine_keyword) ?>">
-                            <?php endif; ?>
-                            <?php if ($year_keyword !== ''): ?>
-                                <input type="hidden" name="year_keyword" value="<?= h($year_keyword) ?>">
-                            <?php endif; ?>
-                            <?php if ($sort !== 'magazine'): ?>
-                                <input type="hidden" name="sort" value="<?= h($sort) ?>">
-                            <?php endif; ?>
-                            <?php if ($direction !== 'asc'): ?>
-                                <input type="hidden" name="direction" value="<?= h($direction) ?>">
                             <?php endif; ?>
                             <input type="number" name="page" min="1" max="<?= h($total_pages) ?>" value="<?= h($page) ?>" aria-label="ページ番号">
                             <button type="submit">移動</button>
