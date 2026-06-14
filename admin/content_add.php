@@ -9,6 +9,10 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function editable_issue_status_sql(): string {
+    return "'approved', 'in_progress', 'verified'";
+}
+
 // 指定した雑誌号の目次を開始ページ順で並べ直し、掲載順を 1,2,3... に振り直す
 function renumber_issue_contents($pdo, $issue_id) {
     $stmt = $pdo->prepare("
@@ -198,7 +202,7 @@ $sql_issues = "
     FROM magazine_issues mi
     JOIN magazines m ON mi.magazine_id = m.id
     JOIN publishers p ON m.publisher_id = p.id
-    WHERE mi.status = 'approved'
+    WHERE mi.status IN (" . editable_issue_status_sql() . ")
     ORDER BY
         mi.issue_year DESC,
         CASE
@@ -251,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 SELECT id
                 FROM magazine_issues
                 WHERE id = :id
-                  AND status = 'approved'
+                  AND status IN (" . editable_issue_status_sql() . ")
                 LIMIT 1
             ");
             $stmt->execute([

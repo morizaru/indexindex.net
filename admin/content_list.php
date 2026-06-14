@@ -9,6 +9,10 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function editable_issue_status_sql(): string {
+    return "'approved', 'in_progress', 'verified'";
+}
+
 // 現在の sort_order 順で 1,2,3... に振り直す
 function renumber_issue_contents_by_current_order($pdo, $issue_id) {
     $stmt = $pdo->prepare("
@@ -256,7 +260,7 @@ $stmt = $pdo->query("
             issue_year
         ) AS filter_year
     FROM magazine_issues
-    WHERE status = 'approved'
+    WHERE status IN (" . editable_issue_status_sql() . ")
       AND COALESCE(
             publication_year,
             YEAR(publication_date),
@@ -279,7 +283,7 @@ $sql_issues = "
     FROM magazine_issues mi
     JOIN magazines m ON mi.magazine_id = m.id
     JOIN publishers p ON m.publisher_id = p.id
-    WHERE mi.status = 'approved'
+    WHERE mi.status IN (" . editable_issue_status_sql() . ")
 ";
 $issue_params = [];
 

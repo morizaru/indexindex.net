@@ -11,6 +11,10 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function editable_issue_status_sql(): string {
+    return "'approved', 'in_progress', 'verified'";
+}
+
 function normalize_episode_no_bulk($value) {
     $value = mb_convert_kana((string)$value, 'as', 'UTF-8');
     if (preg_match('/[0-9]+/u', $value, $m)) {
@@ -460,7 +464,7 @@ $sql_issues = "
     FROM magazine_issues mi
     JOIN magazines m ON mi.magazine_id = m.id
     JOIN publishers p ON m.publisher_id = p.id
-    WHERE mi.status = 'approved'
+    WHERE mi.status IN (" . editable_issue_status_sql() . ")
     ORDER BY
         CASE
             WHEN mi.publication_date IS NOT NULL
@@ -616,7 +620,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             SELECT id
             FROM magazine_issues
             WHERE id = :id
-              AND status = 'approved'
+              AND status IN (" . editable_issue_status_sql() . ")
             LIMIT 1
         ");
         $stmt->execute([
