@@ -12,6 +12,18 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function issue_status_badge(?string $status): ?array {
+    if ($status === 'in_progress') {
+        return ['label' => '登録途中', 'class' => 'issue-status-in-progress'];
+    }
+
+    if ($status === 'verified') {
+        return ['label' => '現物確認済', 'class' => 'issue-status-verified'];
+    }
+
+    return null;
+}
+
 function table_has_column(PDO $pdo, string $table, string $column): bool {
     static $cache = [];
 
@@ -312,13 +324,14 @@ $sql_issue = "
         {$issue_vol_select},
         mi.issue_no,
         {$issue_full_vol_select},
+        mi.status,
         m.name AS magazine_name,
         p.name AS publisher_name
     FROM magazine_issues mi
     JOIN magazines m ON mi.magazine_id = m.id
     JOIN publishers p ON m.publisher_id = p.id
     WHERE mi.id = :issue_id
-      AND mi.status = 'approved'
+      AND mi.status IN ('approved', 'in_progress', 'verified')
 ";
 
 $stmt = $pdo->prepare($sql_issue);
@@ -357,7 +370,7 @@ $stmt = $pdo->prepare("
         {$issue_order_expr} AS issue_order_key
     FROM magazine_issues mi
     WHERE mi.magazine_id = :magazine_id
-      AND mi.status = 'approved'
+      AND mi.status IN ('approved', 'in_progress', 'verified')
     ORDER BY
         issue_order_key ASC,
         mi.id ASC
@@ -497,6 +510,7 @@ $issue_display_name = trim((string)($issue['magazine_name'] ?? '') . ' ' . (stri
 if ($issue_label_special !== '') {
     $issue_display_name .= '（' . $issue_label_special . '）';
 }
+$issue_status_badge = issue_status_badge($issue['status'] ?? null);
 $issue_description_name = $issue_display_name;
 $issue_description_date = format_issue_description_date($issue);
 ?>
@@ -543,6 +557,29 @@ $issue_description_date = format_issue_description_date($issue);
 
         .issue-title-text {
             min-width: 0;
+        }
+
+        .issue-status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.4;
+            white-space: nowrap;
+        }
+
+        .issue-status-in-progress {
+            background: #fff7e6;
+            color: #8a5a00;
+            border: 1px solid #f0c36a;
+        }
+
+        .issue-status-verified {
+            background: #eaf8ef;
+            color: #16743a;
+            border: 1px solid #a9dfb8;
         }
 
         .issue-nav-link {
@@ -805,6 +842,12 @@ require_once __DIR__ . '/includes/header.php';
         <?php endif; ?>
 
         <span class="issue-title-text"><?= h($issue_display_name) ?></span>
+
+        <?php if ($issue_status_badge): ?>
+            <span class="issue-status-badge <?= h($issue_status_badge['class']) ?>">
+                <?= h($issue_status_badge['label']) ?>
+            </span>
+        <?php endif; ?>
 
         <?php if ($newer_issue): ?>
             <a

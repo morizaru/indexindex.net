@@ -30,6 +30,16 @@ function issue_number_db_value($value) {
     return ($value !== '') ? (int)$value : null;
 }
 
+function issue_status_options() {
+    return [
+        'approved' => '公開',
+        'pending' => '保留',
+        'hidden' => '非表示',
+        'in_progress' => '登録途中',
+        'verified' => '現物確認済',
+    ];
+}
+
 function table_has_column($pdo, $table, $column) {
     static $cache = [];
 
@@ -118,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = $number_error;
     } elseif (($number_error = validate_issue_number_field($issue_full_vol, '通巻')) !== '') {
         $error = $number_error;
-    } elseif (!in_array($status, ['approved', 'pending', 'hidden'], true)) {
+    } elseif (!array_key_exists($status, issue_status_options())) {
         $error = '公開状態が正しくありません。';
     } else {
         try {
@@ -829,9 +839,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="form-row">
                 <label>公開状態</label>
                 <select name="status">
-                    <option value="approved" <?= ($status === 'approved') ? 'selected' : '' ?>>approved</option>
-                    <option value="pending" <?= ($status === 'pending') ? 'selected' : '' ?>>pending</option>
-                    <option value="hidden" <?= ($status === 'hidden') ? 'selected' : '' ?>>hidden</option>
+                    <?php foreach (issue_status_options() as $status_value => $status_label): ?>
+                        <option value="<?= h($status_value) ?>" <?= ($status === $status_value) ? 'selected' : '' ?>>
+                            <?= h($status_value) ?>（<?= h($status_label) ?>）
+                        </option>
+                    <?php endforeach; ?>
                 </select>
             </div>
         </div>
