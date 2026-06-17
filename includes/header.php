@@ -31,27 +31,16 @@ $nav_items = [
 }
 
 .site-header-logo {
-    position: relative;
-    display: inline-block;
-    font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: #111;
+    display: inline-flex;
+    align-items: center;
     text-decoration: none;
-    white-space: nowrap;
-    line-height: 1;
-    z-index: 1;
 }
 
-.site-header-logo::before {
-    content: "INDEXINDEX";
-    position: absolute;
-    left: 3px;
-    top: -3px;
-    color: #cfcfcf;
-    z-index: -1;
-    pointer-events: none;
+.site-header-logo img {
+    display: block;
+    width: 220px;
+    max-width: 100%;
+    height: auto;
 }
 
 .site-header-logo:hover {
@@ -105,12 +94,7 @@ $nav_items = [
     }
 
     .site-header-logo {
-        font-size: 24px;
-    }
-
-    .site-header-logo::before {
-        left: 2px;
-        top: -2px;
+        max-width: 220px;
     }
 
     .site-header-nav a,
@@ -122,7 +106,9 @@ $nav_items = [
 </style>
 
 <header class="site-header">
-    <a class="site-header-logo" href="index.php">INDEXINDEX</a>
+    <a class="site-header-logo" href="index.php">
+        <img src="assets/images/main_title0.png" alt="INDEXINDEX" width="220">
+    </a>
 
     <nav class="site-header-nav" aria-label="メインメニュー">
         <?php foreach ($nav_items as $key => $item): ?>
