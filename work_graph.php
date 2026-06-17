@@ -591,15 +591,19 @@ if ($has_graph) {
         }
 
         .container {
-            max-width: 1100px;
+            max-width: 1148px;
             margin: 0 auto;
             background: #fff;
             padding: 24px;
             border-radius: 8px;
+            box-sizing: border-box;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
         }
 
         h1 {
             margin-top: 0;
+            margin-bottom: 20px;
+            line-height: 1.3;
         }
 
         h2 {
@@ -981,6 +985,7 @@ if ($has_graph) {
 
             .container {
                 padding: 12px;
+                border-radius: 6px;
             }
 
             .filter-grid {
@@ -1083,6 +1088,8 @@ if ($has_graph) {
     </style>
 
     <?php include __DIR__ . '/includes/adsense_head.php'; ?>
+
+    <link rel="stylesheet" href="assets/css/common.css">
     
 </head>
 <body id="top">
