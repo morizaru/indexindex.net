@@ -9,6 +9,7 @@ $nav_items = [
     'creators' => ['label' => '人物', 'url' => 'creators.php'],
     'search' => ['label' => '詳細検索', 'url' => 'search.php'],
     'graph' => ['label' => 'グラフ', 'url' => 'work_graph.php'],
+    'mediamix' => ['label' => 'メディアミックス', 'url' => 'mediamix.php'],
     'ranking' => ['label' => 'ランキング', 'url' => 'ranking.php'],
     'recent_updates' => ['label' => '最近の更新', 'url' => 'recent_updates.php'],
 ];

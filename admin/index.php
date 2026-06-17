@@ -69,6 +69,7 @@ header('Content-Type: text/html; charset=UTF-8');
         <li><a href="publisher_add.php">出版社を登録する</a></li>
         <li><a href="episode_format_add.php">話数フォーマットを登録する</a></li>
         <li><a href="source_image_add.php">出典画像を登録する</a></li>
+        <li><a href="work_mediamix_add.php">メディアミックスを登録する</a></li>
     </ul>
 
     <div class="link-group-title">一覧</div>
@@ -81,6 +82,7 @@ header('Content-Type: text/html; charset=UTF-8');
         <li><a href="publishers.php">出版社一覧</a></li>
         <li><a href="episode_formats.php">話数フォーマット一覧</a></li>
         <li><a href="source_image_list.php">出典画像一覧</a></li>
+        <li><a href="work_mediamix_list.php">メディアミックス一覧</a></li>
     </ul>
 
     <div class="link-group-title">TOOL</div>

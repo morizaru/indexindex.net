@@ -12,6 +12,22 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function mediamix_type_label($type) {
+    $labels = [
+        'tv_anime' => 'TVアニメ',
+        'anime_movie' => 'アニメ映画',
+        'live_action_movie' => '実写映画',
+        'tv_drama' => 'TVドラマ',
+        'stage' => '舞台',
+        'ova' => 'OVA',
+        'web_anime' => 'Webアニメ',
+        'game' => 'ゲーム',
+        'other' => 'その他',
+    ];
+
+    return $labels[$type] ?? $type;
+}
+
 function kana_like_values($value) {
     $value = (string)$value;
     $hira = function_exists('mb_convert_kana') ? mb_convert_kana($value, 'c', 'UTF-8') : $value;
@@ -220,7 +236,7 @@ function render_creator_links($creators_data) {
     return implode(' / ', $parts);
 }
 
-$work_id = isset($_GET['work_id']) ? (int)$_GET['work_id'] : 0;
+$work_id = isset($_GET['work_id']) ? (int)$_GET['work_id'] : (isset($_GET['id']) ? (int)$_GET['id'] : 0);
 $keyword = isset($_GET['keyword']) ? trim((string)$_GET['keyword']) : '';
 
 if ($work_id <= 0) {
@@ -409,6 +425,30 @@ $stmt->execute(array_merge([
 ], $keyword_params));
 $contents = $stmt->fetchAll();
 
+$stmt = $pdo->prepare("
+    SELECT
+        id,
+        media_type,
+        title,
+        start_date,
+        end_date,
+        company,
+        broadcaster,
+        note,
+        source_url
+    FROM work_mediamix
+    WHERE work_id = :work_id
+      AND status = 'active'
+    ORDER BY
+        CASE WHEN start_date IS NULL THEN 1 ELSE 0 END ASC,
+        start_date ASC,
+        id ASC
+");
+$stmt->execute([
+    ':work_id' => $work_id
+]);
+$mediamix_rows = $stmt->fetchAll();
+
 // 年一覧
 $years = [];
 foreach ($contents as $row) {
@@ -551,6 +591,47 @@ function format_episode_no($row, $work) {
 
         .graph-links a:hover {
             text-decoration: underline;
+        }
+
+        .mediamix-section {
+            margin: 20px 0;
+            padding: 16px;
+            background: #fafafa;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+        }
+
+        .mediamix-section h2 {
+            margin: 0 0 12px;
+            font-size: 20px;
+        }
+
+        .mediamix-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .mediamix-item {
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            line-height: 1.7;
+        }
+
+        .mediamix-type {
+            display: inline-block;
+            margin-right: 8px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: #333;
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .mediamix-title {
+            font-weight: bold;
         }
 
         table {
@@ -718,6 +799,40 @@ require_once __DIR__ . '/includes/header.php';
     <div class="count">
         掲載件数：<?= h(count($contents)) ?>件
     </div>
+
+    <?php if (!empty($mediamix_rows)): ?>
+        <section class="mediamix-section">
+            <h2>メディアミックス</h2>
+            <div class="mediamix-list">
+                <?php foreach ($mediamix_rows as $row): ?>
+                    <div class="mediamix-item">
+                        <span class="mediamix-type"><?= h(mediamix_type_label($row['media_type'])) ?></span>
+                        <span class="mediamix-title"><?= h($row['title']) ?></span>
+                        <div class="small">
+                            <?php if (!empty($row['start_date'])): ?>
+                                <?= h($row['start_date']) ?>
+                                <?php if (!empty($row['end_date'])): ?>
+                                    - <?= h($row['end_date']) ?>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                            <?php if (!empty($row['broadcaster'])): ?>
+                                <br><?= h($row['broadcaster']) ?>
+                            <?php endif; ?>
+                            <?php if (!empty($row['company'])): ?>
+                                <br><?= h($row['company']) ?>
+                            <?php endif; ?>
+                            <?php if (!empty($row['note'])): ?>
+                                <br><?= h($row['note']) ?>
+                            <?php endif; ?>
+                            <?php if (!empty($row['source_url'])): ?>
+                                <br><a href="<?= h($row['source_url']) ?>" target="_blank" rel="noopener">source</a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <?php if (!empty($contents)): ?>
 
