@@ -329,6 +329,11 @@ $menu_items = [
         'url' => 'work_graph.php',
     ],
     [
+        'title' => 'メディアミックス',
+        'description' => 'メディアミックスの作品の一覧を表示します。',
+        'url' => 'mediamix.php',
+    ],
+    [
         'title' => 'アクセスランキング',
         'description' => '雑誌・人物・作品のアクセスランキングを表示します。',
         'url' => 'ranking.php',
