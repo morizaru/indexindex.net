@@ -595,15 +595,46 @@ function format_episode_no($row, $work) {
 
         .mediamix-section {
             margin: 20px 0;
-            padding: 16px;
-            background: #fafafa;
-            border: 1px solid #e5e5e5;
-            border-radius: 6px;
+            padding: 0;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            overflow: hidden;
         }
 
-        .mediamix-section h2 {
-            margin: 0 0 12px;
+        .mediamix-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 14px 18px;
+            border: 0;
+            background: #222;
+            color: #fff;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .mediamix-toggle::after {
+            content: "+";
+            flex: 0 0 auto;
+            margin-left: 8px;
             font-size: 20px;
+            line-height: 1;
+        }
+
+        .mediamix-toggle[aria-expanded="true"]::after {
+            content: "-";
+        }
+
+        .mediamix-toggle-title {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .mediamix-content {
+            padding: 18px 22px 20px;
         }
 
         .mediamix-list {
@@ -802,34 +833,38 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php if (!empty($mediamix_rows)): ?>
         <section class="mediamix-section">
-            <h2>メディアミックス</h2>
-            <div class="mediamix-list">
-                <?php foreach ($mediamix_rows as $row): ?>
-                    <div class="mediamix-item">
-                        <span class="mediamix-type"><?= h(mediamix_type_label($row['media_type'])) ?></span>
-                        <span class="mediamix-title"><?= h($row['title']) ?></span>
-                        <div class="small">
-                            <?php if (!empty($row['start_date'])): ?>
-                                <?= h($row['start_date']) ?>
-                                <?php if (!empty($row['end_date'])): ?>
-                                    - <?= h($row['end_date']) ?>
+            <button type="button" class="mediamix-toggle" aria-expanded="false">
+                <span class="mediamix-toggle-title">メディアミックス</span>
+            </button>
+            <div class="mediamix-content" hidden>
+                <div class="mediamix-list">
+                    <?php foreach ($mediamix_rows as $row): ?>
+                        <div class="mediamix-item">
+                            <span class="mediamix-type"><?= h(mediamix_type_label($row['media_type'])) ?></span>
+                            <span class="mediamix-title"><?= h($row['title']) ?></span>
+                            <div class="small">
+                                <?php if (!empty($row['start_date'])): ?>
+                                    <?= h($row['start_date']) ?>
+                                    <?php if (!empty($row['end_date'])): ?>
+                                        - <?= h($row['end_date']) ?>
+                                    <?php endif; ?>
                                 <?php endif; ?>
-                            <?php endif; ?>
-                            <?php if (!empty($row['broadcaster'])): ?>
-                                <br><?= h($row['broadcaster']) ?>
-                            <?php endif; ?>
-                            <?php if (!empty($row['company'])): ?>
-                                <br><?= h($row['company']) ?>
-                            <?php endif; ?>
-                            <?php if (!empty($row['note'])): ?>
-                                <br><?= h($row['note']) ?>
-                            <?php endif; ?>
-                            <?php if (!empty($row['source_url'])): ?>
-                                <br><a href="<?= h($row['source_url']) ?>" target="_blank" rel="noopener">source</a>
-                            <?php endif; ?>
+                                <?php if (!empty($row['broadcaster'])): ?>
+                                    <br><?= h($row['broadcaster']) ?>
+                                <?php endif; ?>
+                                <?php if (!empty($row['company'])): ?>
+                                    <br><?= h($row['company']) ?>
+                                <?php endif; ?>
+                                <?php if (!empty($row['note'])): ?>
+                                    <br><?= h($row['note']) ?>
+                                <?php endif; ?>
+                                <?php if (!empty($row['source_url'])): ?>
+                                    <br><a href="<?= h($row['source_url']) ?>" target="_blank" rel="noopener">source</a>
+                                <?php endif; ?>
+                            </div>
                         </div>
-                    </div>
-                <?php endforeach; ?>
+                    <?php endforeach; ?>
+                </div>
             </div>
         </section>
     <?php endif; ?>
@@ -969,6 +1004,19 @@ if (yearFilter) {
 if (textFilter) {
     textFilter.addEventListener('input', applyFilters);
 }
+
+document.querySelectorAll('.mediamix-toggle').forEach(function (button) {
+    button.addEventListener('click', function () {
+        const content = button.nextElementSibling;
+        const isOpen = button.getAttribute('aria-expanded') === 'true';
+
+        button.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+
+        if (content) {
+            content.hidden = isOpen;
+        }
+    });
+});
 </script>
 
 </body>

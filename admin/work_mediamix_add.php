@@ -63,15 +63,15 @@ $error = '';
 $search_q = trim((string)($_GET['work_q'] ?? ($_POST['work_q'] ?? '')));
 $work_results = search_works($pdo, $search_q);
 
-$work_id = 23828;
-$selected_work_title = '追放された転生重騎士はゲーム知識で無双する';
+$work_id = 0;
+$selected_work_title = '';
 $media_type = 'tv_anime';
-$title = '追放された転生重騎士はゲーム知識で無双する';
-$start_date = '2026-07-02';
+$title = '';
+$start_date = '';
 $end_date = '';
 $company = '';
-$broadcaster = 'MBS /TBS系28局”スーパーアニメイズムTURBO”枠にて';
-$note = 'スケジュール：2026年7月2日（木）～';
+$broadcaster = '';
+$note = '';
 $source_url = '';
 $status = 'active';
 
@@ -122,16 +122,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':status' => $status,
             ]);
             $message = 'メディアミックス情報を登録しました。ID: ' . (int)$pdo->lastInsertId();
+
+            $work_id = 0;
+            $selected_work_title = '';
+            $media_type = 'tv_anime';
+            $title = '';
+            $start_date = '';
+            $end_date = '';
+            $company = '';
+            $broadcaster = '';
+            $note = '';
+            $source_url = '';
+            $status = 'active';
         } catch (Exception $e) {
             $error = '登録エラー: ' . $e->getMessage();
         }
-    }
-} else {
-    $stmt = $pdo->prepare("SELECT title FROM works WHERE id = :id LIMIT 1");
-    $stmt->execute([':id' => $work_id]);
-    $selected_work = $stmt->fetch();
-    if ($selected_work) {
-        $selected_work_title = $selected_work['title'];
     }
 }
 ?>
@@ -186,8 +191,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="hidden" id="work_id" name="work_id" value="<?= h($work_id) ?>">
 
         <div class="info">
-            選択中の作品: <span id="selected_work_title"><?= h($selected_work_title) ?></span><br>
-            work_id: <span id="selected_work_id"><?= h($work_id) ?></span>
+            選択中の作品:
+            <span id="selected_work_title"><?= $selected_work_title !== '' ? h($selected_work_title) : '未選択' ?></span><br>
+            work_id: <span id="selected_work_id"><?= $work_id > 0 ? h($work_id) : '-' ?></span>
         </div>
 
         <div class="form-grid">
