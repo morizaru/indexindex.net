@@ -1,6 +1,11 @@
 <?php
 // includes/sidebar.php
 // ランキング・アフィリエイトリンク用サイドバー
+$show_affiliate_links = false;
+
+if (!$show_affiliate_links) {
+    return;
+}
 ?>
 
 <aside class="side-box" aria-label="ランキング・おすすめリンク">
