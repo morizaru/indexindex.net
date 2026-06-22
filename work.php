@@ -269,6 +269,16 @@ if (!$work) {
     exit('指定された作品が見つかりません。');
 }
 
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) AS total_count
+    FROM issue_contents
+    WHERE work_id = :work_id
+");
+$stmt->execute([
+    ':work_id' => $work_id
+]);
+$work_total_content_count = (int)($stmt->fetch()['total_count'] ?? 0);
+
 $keyword_where_sql = '';
 $keyword_params = [];
 if ($keyword !== '') {
@@ -500,6 +510,9 @@ function format_episode_no($row, $work) {
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <?php if ($work_total_content_count === 0): ?>
+        <meta name="robots" content="noindex,follow">
+    <?php endif; ?>
     <title><?= h($work['title']) ?> - 作品詳細 - INDEXINDEX</title>
     <style>
         body {
@@ -964,7 +977,7 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php else: ?>
 
-        <p class="empty">この作品の掲載データはありません。</p>
+        <p class="empty">この作品の掲載データはまだ登録されていません。掲載された雑誌号の目次データが追加されると、雑誌名、号数、掲載順、ページ、関係人物を確認できるようになります。</p>
 
     <?php endif; ?>
 

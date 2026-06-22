@@ -519,6 +519,9 @@ $issue_description_date = format_issue_description_date($issue);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?php if (empty($contents)): ?>
+        <meta name="robots" content="noindex,follow">
+    <?php endif; ?>
     <title><?= h($issue_display_name) ?> - INDEXINDEX</title>
 
     <style>
@@ -884,7 +887,7 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php if (empty($contents)): ?>
 
-        <p class="empty">この雑誌号にはまだ目次が登録されていません。目次データが追加されると、掲載作品、作者、掲載順、開始ページがここに表示されます。</p>
+        <p class="empty">この雑誌号にはまだ目次が登録されていません。目次データが追加されると、掲載作品、作者、掲載順、開始ページがここに表示されます。現在は雑誌名、号数、発行日、発売日などの基本情報のみを確認できます。</p>
 
     <?php else: ?>
 

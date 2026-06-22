@@ -191,6 +191,17 @@ if ($keyword !== '') {
     ];
 }
 
+$stmt = $pdo->prepare("
+    SELECT COUNT(DISTINCT ic.id) AS total_count
+    FROM content_creators cc
+    JOIN issue_contents ic ON cc.content_id = ic.id
+    WHERE cc.creator_id = :creator_id
+");
+$stmt->execute([
+    ':creator_id' => $creator_id
+]);
+$creator_total_content_count = (int)($stmt->fetch()['total_count'] ?? 0);
+
 // 総目次件数
 $count_sql = "
     SELECT COUNT(DISTINCT ic.id) AS total_count
@@ -304,6 +315,9 @@ $sort_labels = [
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <?php if ($creator_total_content_count === 0): ?>
+        <meta name="robots" content="noindex,follow">
+    <?php endif; ?>
     <title><?= h($creator['name']) ?> - 人物詳細 - INDEXINDEX</title>
     <style>
         body {
@@ -812,7 +826,7 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php if (empty($contents)): ?>
 
-        <p class="empty">この人物に紐づく作品データはありません。</p>
+        <p class="empty">この人物に紐づく掲載データはまだ登録されていません。関連する目次データが追加されると、作品名、雑誌名、号数、掲載順、ページを確認できるようになります。</p>
 
     <?php else: ?>
 

@@ -341,6 +341,28 @@ foreach ($all_result_tabs as $tab_key => $tab_label) {
             padding-left: 1.4em;
         }
 
+        .search-guide-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .search-guide-card {
+            padding: 14px 16px;
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            color: #444;
+            line-height: 1.7;
+        }
+
+        .search-guide-title {
+            margin: 0 0 6px;
+            font-weight: 800;
+            color: #222;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -542,6 +564,20 @@ require_once __DIR__ . '/includes/header.php';
     <?php if ($q === ''): ?>
 
         <p class="notice">検索キーワードを入力し、検索対象を選んでください。作品名、作者名、雑誌名の一部だけでも検索できます。</p>
+        <div class="search-guide-grid" aria-label="検索対象の説明">
+            <div class="search-guide-card">
+                <div class="search-guide-title">作品名検索</div>
+                <p>作品タイトルから、掲載された雑誌号、掲載順、開始ページ、関係する作者情報へたどれます。</p>
+            </div>
+            <div class="search-guide-card">
+                <div class="search-guide-title">作者名検索</div>
+                <p>作者、原作者、作画担当などの人物名から、関係する掲載作品や雑誌号を確認できます。</p>
+            </div>
+            <div class="search-guide-card">
+                <div class="search-guide-title">雑誌名検索</div>
+                <p>雑誌名や号数から、登録済みの雑誌号一覧と各号の目次ページへ移動できます。</p>
+            </div>
+        </div>
         <div class="example-box">
             <h2>検索例</h2>
             <ul class="example-list">
@@ -549,6 +585,7 @@ require_once __DIR__ . '/includes/header.php';
                 <li>作品名で探す：ドラえもん、あしたのジョー など</li>
                 <li>作者名で探す：藤子不二雄、ちばてつや など</li>
             </ul>
+            <p>検索結果からは、雑誌号、掲載作品、作者ページ、掲載順の情報を順に確認できます。</p>
         </div>
 
     <?php else: ?>
