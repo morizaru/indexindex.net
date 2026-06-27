@@ -62,7 +62,7 @@ function table_has_column($pdo, $table, $column) {
     return isset($cache[$table][$column]);
 }
 
-$issue_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$issue_id = isset($_GET['issue_id']) ? (int)$_GET['issue_id'] : (int)($_GET['id'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $issue_id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
@@ -74,6 +74,10 @@ if ($issue_id <= 0) {
 
 $message = '';
 $error = '';
+
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '雑誌号を保存しました。';
+}
 
 // 出典画像保存先
 $upload_dir = __DIR__ . '/../uploads/source_images/';
@@ -376,30 +380,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
-            $message = '雑誌号を更新しました。';
-
-            // 再取得
-            $issue = fetch_issue($pdo, $issue_id);
-
-            $publisher_id = (int)$issue['publisher_id'];
-            $magazine_id = (int)$issue['magazine_id'];
-            $magazine_code = $issue['magazine_code'] ?? '';
-
-            $issue_label = $issue['issue_label'];
-            $issue_label_special = $issue['issue_label_special'];
-            $issue_year = $issue['issue_year'];
-            $issue_vol = $issue['issue_vol'];
-            $issue_no = $issue['issue_no'];
-            $issue_full_vol = $issue['issue_full_vol'];
-
-            $publication_date = $issue['publication_date'];
-            $publication_year = $issue['publication_year'];
-            $publication_month = $issue['publication_month'];
-            $publication_day = $issue['publication_day'];
-
-            $release_date = $issue['release_date'];
-            $status = $issue['status'];
-            $source_image_note = '';
+            header('Location: issue_edit.php?issue_id=' . $issue_id . '&saved=1');
+            exit;
 
         } catch (Exception $e) {
             if ($pdo->inTransaction()) {

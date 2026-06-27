@@ -376,25 +376,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
-            $message = '雑誌号を登録しました。';
-
-            // 入力欄を初期化
-            $issue_label = '';
-            $issue_label_special = '';
-            $issue_year = '';
-            $issue_vol = '';
-            $issue_no = '';
-            $issue_full_vol = '';
-            $publication_date = '';
-            $publication_year = '';
-            $publication_month = '';
-            $publication_day = '';
-            $release_date = '';
-            $is_digital = 0;
-            $note = '';
-            $status = 'approved';
-            $source_image_note = '';
-            $magazine_id = 0;
+            header('Location: issue_edit.php?issue_id=' . $issue_id . '&saved=1');
+            exit;
 
         } catch (Exception $e) {
             if ($pdo->inTransaction()) {
