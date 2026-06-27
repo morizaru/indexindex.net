@@ -51,16 +51,13 @@ try {
     if ($type === 'title') {
         $stmt = $pdo->prepare("
             SELECT
-                ic.title_main AS value,
-                MIN(CASE WHEN ic.title_main LIKE :prefix_like ESCAPE '\\\\' THEN 0 ELSE 1 END) AS match_rank
-            FROM issue_contents ic
-            JOIN magazine_issues mi ON ic.issue_id = mi.id
-            WHERE mi.magazine_id = :magazine_id
-              AND ic.title_main IS NOT NULL
-              AND ic.title_main <> ''
-              AND ic.title_main LIKE :like_value ESCAPE '\\\\'
-            GROUP BY ic.title_main
-            ORDER BY match_rank ASC, value ASC
+                w.title AS value,
+                CASE WHEN w.title LIKE :prefix_like ESCAPE '\\\\' THEN 0 ELSE 1 END AS match_rank
+            FROM works w
+            WHERE w.title IS NOT NULL
+              AND w.title <> ''
+              AND w.title LIKE :like_value ESCAPE '\\\\'
+            ORDER BY match_rank ASC, w.title ASC
             LIMIT 20
         ");
     } else {
@@ -82,11 +79,16 @@ try {
         ");
     }
 
-    $stmt->execute([
-        ':magazine_id' => $magazine_id,
+    $params = [
         ':like_value' => $like,
         ':prefix_like' => $prefix_like,
-    ]);
+    ];
+
+    if ($type === 'creator') {
+        $params[':magazine_id'] = $magazine_id;
+    }
+
+    $stmt->execute($params);
 
     $results = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {

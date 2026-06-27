@@ -322,6 +322,14 @@ function send_creator_lookup_json($data) {
     exit;
 }
 
+function escape_like_bulk($value) {
+    return strtr((string)$value, [
+        '\\' => '\\\\',
+        '%' => '\\%',
+        '_' => '\\_',
+    ]);
+}
+
 function lookup_creators_by_title($pdo, $title) {
     $title = mb_convert_kana(trim((string)$title), 'as', 'UTF-8');
 
@@ -332,11 +340,23 @@ function lookup_creators_by_title($pdo, $title) {
     $stmt = $pdo->prepare("
         SELECT id
         FROM works
-        WHERE title = :title
+        WHERE title LIKE :like_title ESCAPE '\\\\'
+          AND title IS NOT NULL
+          AND title <> ''
+        ORDER BY
+            CASE
+                WHEN title = :exact_title THEN 0
+                WHEN title LIKE :prefix_title ESCAPE '\\\\' THEN 1
+                ELSE 2
+            END ASC,
+            CHAR_LENGTH(title) ASC,
+            title ASC
         LIMIT 2
     ");
     $stmt->execute([
-        ':title' => $title
+        ':like_title' => '%' . escape_like_bulk($title) . '%',
+        ':exact_title' => $title,
+        ':prefix_title' => escape_like_bulk($title) . '%',
     ]);
     $works = $stmt->fetchAll();
 
