@@ -51,12 +51,17 @@ try {
     if ($type === 'title') {
         $stmt = $pdo->prepare("
             SELECT
+                w.id,
                 w.title AS value,
-                CASE WHEN w.title LIKE :prefix_like ESCAPE '\\\\' THEN 0 ELSE 1 END AS match_rank
+                MIN(CASE WHEN w.title LIKE :prefix_like ESCAPE '\\\\' THEN 0 ELSE 1 END) AS match_rank
             FROM works w
-            WHERE w.title IS NOT NULL
+            JOIN issue_contents ic ON ic.work_id = w.id
+            JOIN magazine_issues mi ON mi.id = ic.issue_id
+            WHERE mi.magazine_id = :magazine_id
+              AND w.title IS NOT NULL
               AND w.title <> ''
               AND w.title LIKE :like_value ESCAPE '\\\\'
+            GROUP BY w.id, w.title
             ORDER BY match_rank ASC, w.title ASC
             LIMIT 20
         ");
@@ -84,7 +89,7 @@ try {
         ':prefix_like' => $prefix_like,
     ];
 
-    if ($type === 'creator') {
+    if ($type === 'title' || $type === 'creator') {
         $params[':magazine_id'] = $magazine_id;
     }
 
@@ -94,7 +99,41 @@ try {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $value = trim((string)($row['value'] ?? ''));
         if ($value !== '') {
-            $results[] = ['value' => $value];
+            $result = ['value' => $value];
+            if (isset($row['id'])) {
+                $result['work_id'] = (int)$row['id'];
+            }
+            $results[] = $result;
+        }
+    }
+
+    if ($type === 'title' && empty($results)) {
+        $stmt = $pdo->prepare("
+            SELECT
+                w.id,
+                w.title AS value,
+                CASE WHEN w.title LIKE :prefix_like ESCAPE '\\\\' THEN 0 ELSE 1 END AS match_rank
+            FROM works w
+            WHERE w.title IS NOT NULL
+              AND w.title <> ''
+              AND w.title LIKE :like_value ESCAPE '\\\\'
+            ORDER BY match_rank ASC, w.title ASC
+            LIMIT 20
+        ");
+        $stmt->execute([
+            ':like_value' => $like,
+            ':prefix_like' => $prefix_like,
+        ]);
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $value = trim((string)($row['value'] ?? ''));
+            if ($value !== '') {
+                $results[] = [
+                    'value' => $value,
+                    'label' => '全作品：' . $value,
+                    'work_id' => (int)$row['id'],
+                ];
+            }
         }
     }
 

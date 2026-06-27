@@ -75,7 +75,41 @@ function renumber_issue_contents($pdo, $issue_id) {
     }
 }
 
-function get_or_create_work_id($pdo, $title, $publication_type) {
+function get_or_create_work_id($pdo, $title, $publication_type, $selected_work_id = 0) {
+    if ($selected_work_id > 0) {
+        $stmt = $pdo->prepare("
+            SELECT id, publication_type
+            FROM works
+            WHERE id = :id
+              AND title = :title
+            LIMIT 1
+        ");
+        $stmt->execute([
+            ':id' => $selected_work_id,
+            ':title' => $title
+        ]);
+
+        $work = $stmt->fetch();
+
+        if ($work) {
+            $work_id = (int)$work['id'];
+
+            if (empty($work['publication_type'])) {
+                $stmt_update = $pdo->prepare("
+                    UPDATE works
+                    SET publication_type = :publication_type
+                    WHERE id = :id
+                ");
+                $stmt_update->execute([
+                    ':publication_type' => $publication_type,
+                    ':id' => $work_id
+                ]);
+            }
+
+            return $work_id;
+        }
+    }
+
     $stmt = $pdo->prepare("
         SELECT id, publication_type
         FROM works
@@ -415,6 +449,7 @@ function make_empty_rows() {
     for ($i = 0; $i < BULK_ROW_COUNT; $i++) {
         $rows[$i] = [
             'page_start' => '',
+            'work_id' => 0,
             'title_main' => '',
             'creator_name' => '',
             'creators' => [],
@@ -452,6 +487,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['from_toc_extract'])) {
 
             $rows_input[$i] = [
                 'page_start' => '',
+                'work_id' => isset($r['work_id']) ? (int)$r['work_id'] : 0,
                 'title_main' => mb_convert_kana(trim($r['work_title'] ?? ''), 'as', 'UTF-8'),
                 'creator_name' => mb_convert_kana(trim($r['creator_text'] ?? ''), 'as', 'UTF-8'),
                 'creators' => normalize_structured_creators($r['creators'] ?? []),
@@ -515,6 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $posted_row = (isset($posted_rows[$i]) && is_array($posted_rows[$i])) ? $posted_rows[$i] : [];
 
         $page_start = trim($posted_row['page_start'] ?? '');
+        $work_id = isset($posted_row['work_id']) ? (int)$posted_row['work_id'] : 0;
         $title_main = mb_convert_kana(trim($posted_row['title_main'] ?? ''), 'as', 'UTF-8');
         $creator_name = mb_convert_kana(trim($posted_row['creator_name'] ?? ''), 'as', 'UTF-8');
         $episode_no = trim((string)($posted_row['episode_no'] ?? ''));
@@ -524,6 +561,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $rows_input[$i] = [
             'page_start' => $page_start,
+            'work_id' => $work_id,
             'title_main' => $title_main,
             'creator_name' => $creator_name,
             'creators' => $creators,
@@ -546,6 +584,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         for ($i = 0; $i < BULK_ROW_COUNT; $i++) {
             $page_start = $rows_input[$i]['page_start'];
+            $work_id = (int)$rows_input[$i]['work_id'];
             $title_main = $rows_input[$i]['title_main'];
             $creator_name = $rows_input[$i]['creator_name'];
             $creators = $rows_input[$i]['creators'] ?? [];
@@ -617,6 +656,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $valid_rows[] = [
                 'page_start' => $page_start,
+                'work_id' => $work_id,
                 'title_main' => $title_main,
                 'creator_name' => $creator_name,
                 'creators' => $creators,
@@ -655,7 +695,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $inserted_count = 0;
 
         foreach ($valid_rows as $row) {
-            $work_id = get_or_create_work_id($pdo, $row['title_main'], $row['publication_type']);
+            $work_id = get_or_create_work_id($pdo, $row['title_main'], $row['publication_type'], $row['work_id']);
 
             $stmt = $pdo->prepare("
                 INSERT INTO issue_contents (
@@ -1153,15 +1193,20 @@ if ($issue_id > 0) {
                         return;
                     }
 
+                    const label = (typeof row.label === 'string' && row.label !== '') ? row.label : row.value;
                     const button = document.createElement('button');
                     button.type = 'button';
                     button.className = 'suggest-item';
-                    button.textContent = row.value;
+                    button.textContent = label;
                     button.addEventListener('mousedown', function (event) {
                         event.preventDefault();
                     });
                     button.addEventListener('click', function () {
                         input.value = row.value;
+                        const workIdInput = input.parentElement.querySelector('input[name$="[work_id]"]');
+                        if (workIdInput) {
+                            workIdInput.value = row.work_id ? String(row.work_id) : '0';
+                        }
                         closeSuggestList(list);
                         input.dispatchEvent(new Event('change', { bubbles: true }));
                         input.focus();
@@ -1226,6 +1271,13 @@ if ($issue_id > 0) {
                 input.setAttribute('autocomplete', 'off');
 
                 input.addEventListener('input', function () {
+                    if (input.dataset.suggestType === 'title') {
+                        const workIdInput = input.parentElement.querySelector('input[name$="[work_id]"]');
+                        if (workIdInput) {
+                            workIdInput.value = '0';
+                        }
+                    }
+
                     window.clearTimeout(suggestTimer);
                     suggestTimer = window.setTimeout(function () {
                         fetchSuggestions(input);
@@ -1494,6 +1546,11 @@ if ($issue_id > 0) {
                                     name="rows[<?= h($i) ?>][title_main]"
                                     value="<?= h($rows_input[$i]['title_main'] ?? '') ?>"
                                     placeholder="タイトル"
+                                >
+                                <input
+                                    type="hidden"
+                                    name="rows[<?= h($i) ?>][work_id]"
+                                    value="<?= h($rows_input[$i]['work_id'] ?? 0) ?>"
                                 >
                                 <div class="suggest-list"></div>
                                 <div class="creator-autofill-note"></div>
