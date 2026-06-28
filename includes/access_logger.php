@@ -121,6 +121,11 @@ if (!function_exists('ii_access_log')) {
             return;
         }
 
+        if (ii_access_is_distributed_behavior_bot($pdo, $pathOnly, $referrer)) {
+            ii_access_count_bot($pdo, $pathOnly, $ua, 'Behavior Bot / Distributed');
+            return;
+        }
+
         $statusCode = http_response_code();
         if (!$statusCode || $statusCode < 100) {
             $statusCode = null;
@@ -290,6 +295,76 @@ if (!function_exists('ii_access_log')) {
         }
 
         return false;
+    }
+
+    function ii_access_is_distributed_behavior_bot(PDO $pdo, string $path, ?string $referrer): bool {
+        if ($path !== '/indexindex/work_graph.php') {
+            return false;
+        }
+
+        if (trim((string)$referrer) !== '') {
+            return false;
+        }
+
+        try {
+            $stmt = $pdo->prepare("
+                SELECT
+                    COUNT(*) AS pv,
+                    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS empty_referrer_count,
+                    COUNT(DISTINCT ip_hash) AS distinct_ip_count,
+                    COUNT(DISTINCT user_agent) AS distinct_user_agent_count
+                FROM access_logs
+                WHERE access_time >= (NOW() - INTERVAL 30 MINUTE)
+                  AND path = :path
+                  AND is_bot = 0
+            ");
+            $stmt->execute([
+                ':path' => $path,
+            ]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $pv = (int)($row['pv'] ?? 0);
+            if ($pv < 300) {
+                return false;
+            }
+
+            $emptyReferrerCount = (int)($row['empty_referrer_count'] ?? 0);
+            $distinctIpCount = (int)($row['distinct_ip_count'] ?? 0);
+            $distinctUserAgentCount = (int)($row['distinct_user_agent_count'] ?? 0);
+
+            if (($emptyReferrerCount / $pv) < 0.9) {
+                return false;
+            }
+
+            if ($distinctIpCount < ($pv * 0.5)) {
+                return false;
+            }
+
+            if ($distinctUserAgentCount <= 5) {
+                return true;
+            }
+
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) AS cnt
+                FROM access_logs
+                WHERE access_time >= (NOW() - INTERVAL 30 MINUTE)
+                  AND path = :path
+                  AND is_bot = 0
+                GROUP BY user_agent
+                ORDER BY cnt DESC
+                LIMIT 1
+            ");
+            $stmt->execute([
+                ':path' => $path,
+            ]);
+            $uaRow = $stmt->fetch(PDO::FETCH_ASSOC);
+            $topUserAgentCount = (int)($uaRow['cnt'] ?? 0);
+
+            return $topUserAgentCount >= ($pv * 0.5);
+        } catch (Throwable $e) {
+            // 公開ページを止めないため、行動パターン判定失敗は通常アクセスとして扱う
+            return false;
+        }
     }
 
     function ii_access_count_bot(PDO $pdo, string $path, string $ua, ?string $botName = null): void {

@@ -75,6 +75,14 @@ function ii_daily_average($value, int $periodDays): string {
     return $average >= 10 ? number_format($average, 1) : number_format($average, 2);
 }
 
+function ii_percentage($value, $total): string {
+    $total = (int)$total;
+    if ($total <= 0) {
+        return '0.0%';
+    }
+    return number_format(((int)$value) * 100 / $total, 1) . '%';
+}
+
 function ii_device_label($deviceType): string {
     $deviceType = (string)$deviceType;
     $map = [
@@ -86,6 +94,18 @@ function ii_device_label($deviceType): string {
         '' => '不明',
     ];
     return $map[$deviceType] ?? $deviceType;
+}
+
+function ii_bot_display_name($botName): string {
+    $botName = (string)$botName;
+    $map = [
+        'Attack / SQL Injection' => 'Attack / SQL Injection',
+        'Blocked IP Hash' => 'Blocked IP Hash',
+        'Behavior Bot / Distributed' => 'Behavior Bot / Distributed',
+        'Googlebot' => 'Googlebot',
+        'Bingbot' => 'Bingbot',
+    ];
+    return $map[$botName] ?? ($botName !== '' ? $botName : 'その他');
 }
 
 function ii_table_exists(PDO $pdo, string $tableName): bool {
@@ -315,47 +335,150 @@ $browserRows = ii_fetch_all($pdo, "
     ORDER BY cnt DESC
 ", $params);
 
+$hasBotTable = ii_table_exists($pdo, 'access_bot_daily');
 $botParams = [':from_date' => $from, ':to_date' => $to];
+$botCount = ['cnt' => 0];
+$botDailyRows = [];
+$botNameRows = [];
+$botPageRows = [];
+$botDetailRows = [];
+$botProtectionRows = [];
+$recentBotProtectionRows = [];
+$behaviorBotPageRows = [];
+$recentBotNameRows = [];
+$botBreakdownRows = [];
 
-$botCount = ii_fetch_one($pdo, "
-    SELECT COALESCE(SUM(count), 0) AS cnt
-    FROM access_bot_daily
-    WHERE access_date BETWEEN :from_date AND :to_date
-", $botParams);
+if ($hasBotTable) {
+    $botCount = ii_fetch_one($pdo, "
+        SELECT COALESCE(SUM(count), 0) AS cnt
+        FROM access_bot_daily
+        WHERE access_date BETWEEN :from_date AND :to_date
+    ", $botParams);
 
-$botDailyRows = ii_fetch_all($pdo, "
-    SELECT access_date, SUM(count) AS cnt
-    FROM access_bot_daily
-    WHERE access_date BETWEEN :from_date AND :to_date
-    GROUP BY access_date
-    ORDER BY access_date
-", $botParams);
+    $botDailyRows = ii_fetch_all($pdo, "
+        SELECT access_date, SUM(count) AS cnt
+        FROM access_bot_daily
+        WHERE access_date BETWEEN :from_date AND :to_date
+        GROUP BY access_date
+        ORDER BY access_date
+    ", $botParams);
 
-$botNameRows = ii_fetch_all($pdo, "
-    SELECT bot_name, SUM(count) AS cnt
-    FROM access_bot_daily
-    WHERE access_date BETWEEN :from_date AND :to_date
-    GROUP BY bot_name
-    ORDER BY cnt DESC
-    LIMIT 50
-", $botParams);
+    $botNameRows = ii_fetch_all($pdo, "
+        SELECT
+            CASE
+                WHEN bot_name IN ('Attack / SQL Injection', 'Blocked IP Hash', 'Behavior Bot / Distributed', 'Googlebot', 'Bingbot')
+                THEN bot_name
+                ELSE 'その他'
+            END AS bot_name,
+            SUM(count) AS cnt
+        FROM access_bot_daily
+        WHERE access_date BETWEEN :from_date AND :to_date
+        GROUP BY
+            CASE
+                WHEN bot_name IN ('Attack / SQL Injection', 'Blocked IP Hash', 'Behavior Bot / Distributed', 'Googlebot', 'Bingbot')
+                THEN bot_name
+                ELSE 'その他'
+            END
+        ORDER BY cnt DESC
+        LIMIT 50
+    ", $botParams);
 
-$botPageRows = ii_fetch_all($pdo, "
-    SELECT path, SUM(count) AS cnt
-    FROM access_bot_daily
-    WHERE access_date BETWEEN :from_date AND :to_date
+    $botPageRows = ii_fetch_all($pdo, "
+        SELECT path, SUM(count) AS cnt
+        FROM access_bot_daily
+        WHERE access_date BETWEEN :from_date AND :to_date
+        GROUP BY path
+        ORDER BY cnt DESC
+        LIMIT 50
+    ", $botParams);
+
+    $botDetailRows = ii_fetch_all($pdo, "
+        SELECT access_date, path, bot_name, count
+        FROM access_bot_daily
+        WHERE access_date BETWEEN :from_date AND :to_date
+        ORDER BY access_date DESC, count DESC
+        LIMIT 100
+    ", $botParams);
+
+    $botProtectionRows = ii_fetch_all($pdo, "
+        SELECT bot_name, SUM(count) AS cnt
+        FROM access_bot_daily
+        WHERE access_date BETWEEN :from_date AND :to_date
+        GROUP BY bot_name
+        ORDER BY cnt DESC
+    ", $botParams);
+
+    $recentBotProtectionRows = ii_fetch_all($pdo, "
+        SELECT
+            access_date,
+            SUM(CASE WHEN bot_name = 'Attack / SQL Injection' THEN count ELSE 0 END) AS attack_count,
+            SUM(CASE WHEN bot_name = 'Blocked IP Hash' THEN count ELSE 0 END) AS blocked_ip_count,
+            SUM(CASE WHEN bot_name = 'Behavior Bot / Distributed' THEN count ELSE 0 END) AS behavior_count,
+            SUM(count) AS bot_total
+        FROM access_bot_daily
+        WHERE access_date >= (CURDATE() - INTERVAL 6 DAY)
+          AND access_date <= CURDATE()
+        GROUP BY access_date
+        ORDER BY access_date DESC
+    ");
+
+    $behaviorBotPageRows = ii_fetch_all($pdo, "
+        SELECT path, SUM(count) AS cnt
+        FROM access_bot_daily
+        WHERE access_date BETWEEN :from_date AND :to_date
+          AND bot_name = 'Behavior Bot / Distributed'
+        GROUP BY path
+        ORDER BY cnt DESC
+        LIMIT 50
+    ", $botParams);
+
+    $botBreakdownRows = ii_fetch_all($pdo, "
+        SELECT bot_name, SUM(count) AS cnt
+        FROM access_bot_daily
+        WHERE access_date BETWEEN :from_date AND :to_date
+        GROUP BY bot_name
+        ORDER BY cnt DESC
+        LIMIT 50
+    ", $botParams);
+
+    $recentBotNameRows = ii_fetch_all($pdo, "
+        SELECT
+            access_date,
+            bot_name,
+            SUM(count) AS cnt
+        FROM access_bot_daily
+        WHERE access_date >= (CURDATE() - INTERVAL 6 DAY)
+        GROUP BY access_date, bot_name
+        ORDER BY access_date DESC, cnt DESC
+        LIMIT 200
+    ");
+}
+
+$botCountMap = [];
+foreach ($botNameRows as $row) {
+    $botCountMap[(string)($row['bot_name'] ?? '')] = (int)($row['cnt'] ?? 0);
+}
+$attackBotCount = $botCountMap['Attack / SQL Injection'] ?? 0;
+$blockedIpBotCount = $botCountMap['Blocked IP Hash'] ?? 0;
+$behaviorBotCount = $botCountMap['Behavior Bot / Distributed'] ?? 0;
+$botTotalCount = (int)($botCount['cnt'] ?? 0);
+
+$distributedCandidateRows = ii_fetch_all($pdo, "
+    SELECT
+        path,
+        COUNT(*) AS pv,
+        COUNT(DISTINCT ip_hash) AS ip_count,
+        COUNT(DISTINCT visitor_hash) AS visitor_count,
+        COUNT(DISTINCT visitor_session_id) AS session_count,
+        COUNT(DISTINCT user_agent) AS ua_count,
+        SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count
+    FROM access_logs
+    WHERE access_time >= CURDATE()
+      AND is_bot = 0
     GROUP BY path
-    ORDER BY cnt DESC
-    LIMIT 50
-", $botParams);
-
-$botDetailRows = ii_fetch_all($pdo, "
-    SELECT access_date, path, bot_name, count
-    FROM access_bot_daily
-    WHERE access_date BETWEEN :from_date AND :to_date
-    ORDER BY access_date DESC, count DESC
-    LIMIT 100
-", $botParams);
+    ORDER BY pv DESC
+    LIMIT 20
+");
 
 $monthlyRows = ii_get_monthly_rows($pdo);
 
@@ -393,7 +516,7 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
         label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
         input[type="date"] { padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
         button { border: 0; border-radius: 8px; padding: 10px 16px; background: #111827; color: #fff; font-weight: 700; cursor: pointer; }
-        .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
         .summary-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; }
         .summary-box .label { color: #6b7280; font-size: 13px; }
         .summary-box .num { font-size: 30px; font-weight: 800; }
@@ -426,9 +549,12 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
         <h2>アクセス状況</h2>
         <div class="summary">
             <div class="summary-box"><div class="label">訪問者数</div><div class="num"><?= number_format((int)($summary['visitors'] ?? 0)) ?></div><div class="small">平均：<?= h(ii_daily_average($summary['visitors'] ?? 0, $periodDays)) ?>/日（<?= h($periodDays) ?>日間）</div><div class="small">30分以内の同一訪問を1件として集計</div></div>
-            <div class="summary-box"><div class="label">ページ閲覧数</div><div class="num"><?= number_format((int)($summary['page_views'] ?? 0)) ?></div><div class="small">平均：<?= h(ii_daily_average($summary['page_views'] ?? 0, $periodDays)) ?>/日（<?= h($periodDays) ?>日間）</div><div class="small">PV</div></div>
+            <div class="summary-box"><div class="label">通常PV</div><div class="num"><?= number_format((int)($summary['page_views'] ?? 0)) ?></div><div class="small">平均：<?= h(ii_daily_average($summary['page_views'] ?? 0, $periodDays)) ?>/日（<?= h($periodDays) ?>日間）</div><div class="small">access_logs / is_bot = 0</div></div>
             <div class="summary-box"><div class="label">UU数</div><div class="num"><?= number_format((int)($summary['uu'] ?? 0)) ?></div><div class="small">平均：<?= h(ii_daily_average($summary['uu'] ?? 0, $periodDays)) ?>/日（<?= h($periodDays) ?>日間）</div><div class="small">IP＋UAの匿名ハッシュ単位</div></div>
-            <div class="summary-box"><div class="label">botアクセス</div><div class="num"><?= number_format((int)($botCount['cnt'] ?? 0)) ?></div><div class="small">平均：<?= h(ii_daily_average($botCount['cnt'] ?? 0, $periodDays)) ?>/日（<?= h($periodDays) ?>日間）</div><div class="small">access_bot_daily の集計値</div></div>
+            <div class="summary-box"><div class="label">botアクセス合計</div><div class="num"><?= number_format((int)($botCount['cnt'] ?? 0)) ?></div><div class="small">平均：<?= h(ii_daily_average($botCount['cnt'] ?? 0, $periodDays)) ?>/日（<?= h($periodDays) ?>日間）</div><div class="small">access_bot_daily の集計値</div></div>
+            <div class="summary-box"><div class="label">Attack / SQL Injection</div><div class="num"><?= number_format($attackBotCount) ?></div><div class="small">SQL Injection対策で除外</div></div>
+            <div class="summary-box"><div class="label">Blocked IP Hash</div><div class="num"><?= number_format($blockedIpBotCount) ?></div><div class="small">匿名IPハッシュ除外</div></div>
+            <div class="summary-box"><div class="label">Behavior Bot / Distributed</div><div class="num"><?= number_format($behaviorBotCount) ?></div><div class="small">分散bot行動判定で除外</div></div>
         </div>
     </div>
 
@@ -448,11 +574,27 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
     <div class="card"><h2>ページ別アクセス 棒グラフ</h2><div class="chart-wrap"><canvas id="pageChart" width="1000" height="560"></canvas></div><div class="small">上位15ページまで表示します。</div></div>
 
     <div class="grid2">
-        <div class="card"><h2>bot別アクセス数</h2><table><thead><tr><th>bot</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botNameRows as $row): ?><tr><td><?= h($row['bot_name']) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$botNameRows): ?><tr><td colspan="2">データなし</td></tr><?php endif; ?></tbody></table></div>
+        <div class="card"><h2>bot別アクセス数</h2><table><thead><tr><th>bot</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botNameRows as $row): ?><tr><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$botNameRows): ?><tr><td colspan="2">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table></div>
         <div class="card"><h2>botページ別アクセス数</h2><table><thead><tr><th>ページ</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botPageRows as $row): ?><tr><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$botPageRows): ?><tr><td colspan="2">データなし</td></tr><?php endif; ?></tbody></table></div>
     </div>
 
-    <div class="card"><h2>botアクセス詳細</h2><table><thead><tr><th>日付</th><th>ページ</th><th>bot</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botDetailRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="mono"><?= h($row['path']) ?></td><td><?= h($row['bot_name']) ?></td><td class="right"><?= number_format((int)$row['count']) ?></td></tr><?php endforeach; ?><?php if (!$botDetailRows): ?><tr><td colspan="4">データなし</td></tr><?php endif; ?></tbody></table></div>
+    <div class="grid2">
+        <div class="card"><h2>対策bot内訳</h2><table><thead><tr><th>bot分類</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botProtectionRows as $row): ?><tr><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$botProtectionRows): ?><tr><td colspan="2">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">表示期間内の access_bot_daily を bot_name 別に集計します。</div></div>
+        <div class="card"><h2>Behavior Bot / Distributed ページ別</h2><table><thead><tr><th>ページ</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($behaviorBotPageRows as $row): ?><tr><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$behaviorBotPageRows): ?><tr><td colspan="2">データなし</td></tr><?php endif; ?></tbody></table><div class="small">分散bot判定に該当したページ別件数です。</div></div>
+    </div>
+
+    <div class="grid2">
+        <div class="card"><h2>bot合計の内訳</h2><table><thead><tr><th>bot_name</th><th class="right">件数</th><th class="right">割合</th></tr></thead><tbody><?php foreach ($botBreakdownRows as $row): ?><tr><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td><td class="right"><?= h(ii_percentage($row['cnt'] ?? 0, $botTotalCount)) ?></td></tr><?php endforeach; ?><?php if (!$botBreakdownRows): ?><tr><td colspan="3">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">表示期間内のbot合計が、どの bot_name で集計されているかを表示します。</div></div>
+        <div class="card"><h2>分散bot判定メモ</h2><?php if ($behaviorBotCount > 0): ?><p>Behavior Bot / Distributed が表示期間内に発生しています。</p><?php else: ?><p>Behavior Bot / Distributed は表示期間内ではまだ発生していません。</p><p class="small">User-Agentで Googlebot / Bingbot / Other Bot / Crawler / Bot と判定されたアクセスは、Behavior判定より先に既存bot名で access_bot_daily に集計されます。分散bot候補が通常ログ側に残っているかは下の「通常ログ側 分散bot候補」で確認してください。</p><?php endif; ?></div>
+    </div>
+
+    <div class="card"><h2>直近のbot対策状況</h2><table><thead><tr><th>日付</th><th class="right">Attack / SQL Injection</th><th class="right">Blocked IP Hash</th><th class="right">Behavior Bot / Distributed</th><th class="right">bot合計</th></tr></thead><tbody><?php foreach ($recentBotProtectionRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="right"><?= number_format((int)$row['attack_count']) ?></td><td class="right"><?= number_format((int)$row['blocked_ip_count']) ?></td><td class="right"><?= number_format((int)$row['behavior_count']) ?></td><td class="right"><?= number_format((int)$row['bot_total']) ?></td></tr><?php endforeach; ?><?php if (!$recentBotProtectionRows): ?><tr><td colspan="5">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">直近7日間の対策系bot分類とbot合計です。</div></div>
+
+    <div class="card"><h2>直近7日 bot_name別内訳</h2><table><thead><tr><th>日付</th><th>bot_name</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($recentBotNameRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$recentBotNameRows): ?><tr><td colspan="3">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">直近7日間の access_bot_daily を日付・bot_name 別に表示します。</div></div>
+
+    <div class="card"><h2>通常ログ側 分散bot候補</h2><table><thead><tr><th>ページ</th><th class="right">PV</th><th class="right">IP数</th><th class="right">訪問者数</th><th class="right">セッション数</th><th class="right">UA数</th><th class="right">referrer空</th><th class="right">referrer空率</th></tr></thead><tbody><?php foreach ($distributedCandidateRows as $row): ?><tr><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['pv']) ?></td><td class="right"><?= number_format((int)$row['ip_count']) ?></td><td class="right"><?= number_format((int)$row['visitor_count']) ?></td><td class="right"><?= number_format((int)$row['session_count']) ?></td><td class="right"><?= number_format((int)$row['ua_count']) ?></td><td class="right"><?= number_format((int)$row['no_referrer_count']) ?></td><td class="right"><?= h(ii_percentage($row['no_referrer_count'] ?? 0, $row['pv'] ?? 0)) ?></td></tr><?php endforeach; ?><?php if (!$distributedCandidateRows): ?><tr><td colspan="8">データなし</td></tr><?php endif; ?></tbody></table><div class="small">今日の通常ログ（is_bot = 0）に残っている高PVページを表示します。/indexindex/work_graph.php のPV・IP数・セッション数・referrer空率が高い場合は、Behavior Bot / Distributed の判定条件見直し候補です。</div></div>
+
+    <div class="card"><h2>botアクセス詳細</h2><table><thead><tr><th>日付</th><th>ページ</th><th>bot</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botDetailRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="mono"><?= h($row['path']) ?></td><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['count']) ?></td></tr><?php endforeach; ?><?php if (!$botDetailRows): ?><tr><td colspan="4">データなし</td></tr><?php endif; ?></tbody></table></div>
 
     <div class="grid2">
         <div class="card"><h2>アクセスデバイス</h2><table><thead><tr><th>デバイス</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($deviceRows as $row): ?><tr><td><?= h(ii_device_label($row['device_type'])) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$deviceRows): ?><tr><td colspan="2">データなし</td></tr><?php endif; ?></tbody></table></div>
