@@ -11,8 +11,12 @@ function h($value) {
 
 $message = '';
 $error = '';
-$issue_id = '';
+$issue_id = trim((string)($_GET['issue_id'] ?? ''));
 $note = '';
+
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '出典画像を登録しました。';
+}
 
 // 保存先
 $upload_dir = __DIR__ . '/../uploads/source_images/';
@@ -97,8 +101,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':note' => ($note !== '') ? $note : null,
                     ]);
 
-                    $message = '出典画像を登録しました。';
-                    $note = '';
+                    header('Location: source_image_add.php?issue_id=' . (int)$issue_id . '&saved=1');
+                    exit;
                 } catch (Exception $e) {
                     $error = '登録エラー：' . $e->getMessage();
                 }

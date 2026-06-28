@@ -398,23 +398,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
-            $message = '目次データを登録しました。開始ページ順で掲載順を自動更新しました。';
-
-            // 登録後、同じ雑誌号は残して入力欄を空にする
-            $sort_order = '';
-            $page_start = '';
-            $page_end = '';
-            $title_main = '';
-            $episode_title = '';
-            $episode_no = '';
-            $creator_rows = make_empty_creator_rows();
-            $note = '';
-
-            $is_one_shot = 0;
-            $is_guest_publication = 0;
-            $is_new_series = 0;
-            $is_final_episode = 0;
-            $publication_type = '連載';
+            header('Location: content_edit.php?id=' . $content_id . '&saved=1');
+            exit;
         } catch (Exception $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();

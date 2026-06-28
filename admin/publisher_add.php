@@ -50,8 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $new_id = (int)$pdo->lastInsertId();
 
-                $message = '出版社を登録しました。ID：' . $new_id;
-                $name = '';
+                header('Location: publisher_edit.php?id=' . $new_id . '&saved=1');
+                exit;
             }
         } catch (Exception $e) {
             $error = '登録エラー：' . $e->getMessage();

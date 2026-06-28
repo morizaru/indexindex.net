@@ -100,13 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $new_id = (int)$pdo->lastInsertId();
 
-                $message = '話数フォーマットを登録しました。ID：' . $new_id;
-
-                $name = '';
-                $prefix = '';
-                $suffix = '';
-                $number_style = '';
-                $note = '';
+                header('Location: episode_format_edit.php?id=' . $new_id . '&saved=1');
+                exit;
             }
         } catch (Exception $e) {
             $error = '登録エラー：' . $e->getMessage();

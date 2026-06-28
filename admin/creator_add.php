@@ -106,12 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $new_id = (int)$pdo->lastInsertId();
 
-                $message = '人物を登録しました。ID：' . $new_id;
-
-                $name = '';
-                $name_kana = '';
-                $name_search = '';
-                $debut_work_id = '';
+                header('Location: creator_edit.php?id=' . $new_id . '&saved=1');
+                exit;
             }
         } catch (Exception $e) {
             $error = '登録エラー：' . $e->getMessage();

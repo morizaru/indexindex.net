@@ -472,6 +472,11 @@ $error = '';
 $issue_id = isset($_GET['issue_id']) ? (int)$_GET['issue_id'] : 0;
 $rows_input = make_empty_rows();
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $inserted_count = isset($_GET['inserted']) ? max(0, (int)$_GET['inserted']) : 0;
+    $message = $inserted_count . '件の目次データを登録しました。開始ページ順で掲載順を自動更新しました。';
+}
+
 // 目次抽出TOOLから渡されたデータを反映
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['from_toc_extract'])) {
     $session_issue_id = isset($_SESSION['toc_extract_issue_id']) ? (int)$_SESSION['toc_extract_issue_id'] : 0;
@@ -789,14 +794,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         unset($_SESSION['toc_extract_rows'], $_SESSION['toc_extract_issue_id']);
 
-        $message = $inserted_count . '件の目次データを登録しました。開始ページ順で掲載順を自動更新しました。';
-        $rows_input = make_empty_rows();
-    } catch (Exception $e) {
+        header('Location: content_bulk_add.php?issue_id=' . $issue_id . '&saved=1&inserted=' . $inserted_count);
+        exit;
+    } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
 
-        $error = '登録エラー：' . $e->getMessage();
+        $error = '登録に失敗しました。入力内容は保持されています。登録エラー：' . $e->getMessage();
     }
 }
 
@@ -1136,7 +1141,101 @@ if ($issue_id > 0) {
     </style>
 
     <script>
+        const shouldRestoreBulkDraft = <?= json_encode($_SERVER['REQUEST_METHOD'] !== 'POST' && !isset($_GET['saved']) && !isset($_GET['from_toc_extract'])) ?>;
+        const shouldClearBulkDraft = <?= json_encode(isset($_GET['saved']) && $_GET['saved'] === '1') ?>;
+
         document.addEventListener('DOMContentLoaded', function () {
+            const bulkForm = document.querySelector('form.js-content-bulk-form');
+            const issueSelect = document.querySelector('select[name="issue_id"]');
+
+            function bulkDraftKey() {
+                const issueId = issueSelect ? issueSelect.value : '';
+                return 'indexindex:content_bulk_add:' + issueId;
+            }
+
+            function saveBulkDraft() {
+                if (!bulkForm || !window.localStorage) {
+                    return;
+                }
+
+                const values = {};
+                bulkForm.querySelectorAll('input, select, textarea').forEach(function (field) {
+                    if (!field.name) {
+                        return;
+                    }
+
+                    if (field.type === 'checkbox') {
+                        values[field.name] = field.checked ? '1' : '';
+                    } else {
+                        values[field.name] = field.value;
+                    }
+                });
+
+                try {
+                    localStorage.setItem(bulkDraftKey(), JSON.stringify(values));
+                } catch (error) {
+                }
+            }
+
+            function restoreBulkDraft() {
+                if (!bulkForm || !window.localStorage || !shouldRestoreBulkDraft) {
+                    return;
+                }
+
+                let values = null;
+                try {
+                    values = JSON.parse(localStorage.getItem(bulkDraftKey()) || 'null');
+                } catch (error) {
+                    values = null;
+                }
+
+                if (!values || typeof values !== 'object') {
+                    return;
+                }
+
+                bulkForm.querySelectorAll('input, select, textarea').forEach(function (field) {
+                    if (!field.name || !Object.prototype.hasOwnProperty.call(values, field.name)) {
+                        return;
+                    }
+
+                    if (field.type === 'checkbox') {
+                        field.checked = values[field.name] === '1';
+                    } else {
+                        field.value = values[field.name];
+                    }
+                });
+            }
+
+            function clearBulkDraft() {
+                if (!window.localStorage) {
+                    return;
+                }
+
+                try {
+                    localStorage.removeItem(bulkDraftKey());
+                } catch (error) {
+                }
+            }
+
+            if (shouldClearBulkDraft) {
+                clearBulkDraft();
+            } else {
+                restoreBulkDraft();
+            }
+
+            let draftTimer = null;
+            if (bulkForm) {
+                bulkForm.addEventListener('input', function () {
+                    window.clearTimeout(draftTimer);
+                    draftTimer = window.setTimeout(saveBulkDraft, 250);
+                });
+
+                bulkForm.addEventListener('change', function () {
+                    window.clearTimeout(draftTimer);
+                    draftTimer = window.setTimeout(saveBulkDraft, 100);
+                });
+            }
+
             const rows = document.querySelectorAll('.bulk-table tbody tr');
 
             rows.forEach(function (row) {
@@ -1160,7 +1259,6 @@ if ($issue_id > 0) {
                 });
             });
 
-            const issueSelect = document.querySelector('select[name="issue_id"]');
             let suggestTimer = null;
             let activeController = null;
 
@@ -1207,6 +1305,7 @@ if ($issue_id > 0) {
                         if (workIdInput) {
                             workIdInput.value = row.work_id ? String(row.work_id) : '0';
                         }
+                        saveBulkDraft();
                         closeSuggestList(list);
                         input.dispatchEvent(new Event('change', { bubbles: true }));
                         input.focus();
@@ -1476,7 +1575,7 @@ if ($issue_id > 0) {
         </div>
     <?php endif; ?>
 
-    <form method="post" action="content_bulk_add.php<?= ($issue_id > 0) ? '?issue_id=' . h($issue_id) : '' ?>">
+    <form method="post" action="content_bulk_add.php<?= ($issue_id > 0) ? '?issue_id=' . h($issue_id) : '' ?>" class="js-content-bulk-form">
 
         <div class="form-row">
             <label>

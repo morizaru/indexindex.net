@@ -22,6 +22,10 @@ if ($work_id <= 0) {
 $message = '';
 $error = '';
 
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '作品を保存しました。';
+}
+
 // 話数フォーマット一覧
 $stmt = $pdo->query("
     SELECT
@@ -143,33 +147,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':work_id' => $work_id
                 ]);
 
-                $message = '作品を更新しました。';
-
-                // 再取得
-                $stmt = $pdo->prepare("
-                    SELECT
-                        id,
-                        title,
-                        title_sub,
-                        title_kana,
-                        publication_type,
-                        episode_format_id,
-                        created_at,
-                        updated_at
-                    FROM works
-                    WHERE id = :id
-                    LIMIT 1
-                ");
-                $stmt->execute([
-                    ':id' => $work_id
-                ]);
-                $work = $stmt->fetch();
-
-                $title = $work['title'];
-                $title_sub = $work['title_sub'] ?? '';
-                $title_kana = $work['title_kana'] ?? '';
-                $publication_type = $work['publication_type'] ?? '連載';
-                $episode_format_id = isset($work['episode_format_id']) ? (int)$work['episode_format_id'] : 0;
+                header('Location: work_edit.php?id=' . $work_id . '&saved=1');
+                exit;
             }
         } catch (Exception $e) {
             $error = '更新エラー：' . $e->getMessage();

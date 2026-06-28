@@ -3,7 +3,7 @@
 
 header('Content-Type: text/html; charset=UTF-8');
 
-require_once __DIR__ . 'app/config.php';
+require_once __DIR__ . '/app/config.php';
 
 function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -11,11 +11,15 @@ function h($value) {
 
 $message = '';
 $error = '';
-$issue_id = '';
+$issue_id = trim((string)($_GET['issue_id'] ?? ''));
 $note = '';
 
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '出典画像を登録しました。';
+}
+
 // 保存先
-$upload_dir = __DIR__ . 'uploads/source_images/';
+$upload_dir = __DIR__ . '/uploads/source_images/';
 $upload_url_base = 'uploads/source_images/';
 
 // 雑誌号一覧を取得
@@ -97,8 +101,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':note' => ($note !== '') ? $note : null,
                     ]);
 
-                    $message = '出典画像を登録しました。';
-                    $note = '';
+                    header('Location: source_image_add.php?issue_id=' . (int)$issue_id . '&saved=1');
+                    exit;
                 } catch (Exception $e) {
                     $error = '登録エラー：' . $e->getMessage();
                 }

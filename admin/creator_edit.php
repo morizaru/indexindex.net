@@ -36,6 +36,10 @@ if ($creator_id <= 0) {
 $message = '';
 $error = '';
 
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '人物を保存しました。';
+}
+
 // 現在データ取得
 $stmt = $pdo->prepare("
     SELECT
@@ -131,33 +135,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':id' => $creator_id
                 ]);
 
-                $message = '人物を更新しました。';
-
-                // 再取得
-                $stmt = $pdo->prepare("
-                    SELECT
-                        c.id,
-                        c.name,
-                        c.name_kana,
-                        c.name_search,
-                        c.debut_work_id,
-                        w.title AS debut_work_title,
-                        c.created_at
-                    FROM creators c
-                    LEFT JOIN works w ON c.debut_work_id = w.id
-                    WHERE c.id = :id
-                    LIMIT 1
-                ");
-                $stmt->execute([
-                    ':id' => $creator_id
-                ]);
-                $creator = $stmt->fetch();
-
-                $name = $creator['name'];
-                $name_kana = $creator['name_kana'] ?? '';
-                $name_search = $creator['name_search'] ?? '';
-                $debut_work_id = $creator['debut_work_id'] ?? '';
-                $debut_work_title = $creator['debut_work_title'] ?? '';
+                header('Location: creator_edit.php?id=' . $creator_id . '&saved=1');
+                exit;
             }
         } catch (Exception $e) {
             $error = '更新エラー：' . $e->getMessage();

@@ -22,6 +22,10 @@ if ($magazine_id <= 0) {
 $message = '';
 $error = '';
 
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '雑誌本体を保存しました。';
+}
+
 // 出版社一覧
 $stmt = $pdo->query("
     SELECT id, name
@@ -114,29 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':id' => $magazine_id
                     ]);
 
-                    $message = '雑誌本体を更新しました。';
-
-                    // 再取得
-                    $stmt = $pdo->prepare("
-                        SELECT
-                            m.id,
-                            m.publisher_id,
-                            m.name,
-                            m.created_at,
-                            m.updated_at,
-                            p.name AS publisher_name
-                        FROM magazines m
-                        JOIN publishers p ON m.publisher_id = p.id
-                        WHERE m.id = :id
-                        LIMIT 1
-                    ");
-                    $stmt->execute([
-                        ':id' => $magazine_id
-                    ]);
-                    $magazine = $stmt->fetch();
-
-                    $name = $magazine['name'];
-                    $publisher_id = (int)$magazine['publisher_id'];
+                    header('Location: magazine_edit.php?id=' . $magazine_id . '&saved=1');
+                    exit;
                 }
             }
         } catch (Exception $e) {

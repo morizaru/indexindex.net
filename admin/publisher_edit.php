@@ -22,6 +22,10 @@ if ($publisher_id <= 0) {
 $message = '';
 $error = '';
 
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '出版社を保存しました。';
+}
+
 // 現在データ取得
 $stmt = $pdo->prepare("
     SELECT
@@ -79,24 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':id' => $publisher_id
                 ]);
 
-                $message = '出版社を更新しました。';
-
-                // 再取得
-                $stmt = $pdo->prepare("
-                    SELECT
-                        id,
-                        name,
-                        created_at,
-                        updated_at
-                    FROM publishers
-                    WHERE id = :id
-                    LIMIT 1
-                ");
-                $stmt->execute([
-                    ':id' => $publisher_id
-                ]);
-                $publisher = $stmt->fetch();
-                $name = $publisher['name'];
+                header('Location: publisher_edit.php?id=' . $publisher_id . '&saved=1');
+                exit;
             }
         } catch (Exception $e) {
             $error = '更新エラー：' . $e->getMessage();

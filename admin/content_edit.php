@@ -456,6 +456,10 @@ if (isset($_GET['updated']) && $_GET['updated'] === '1') {
     $message = '目次データを更新しました。';
 }
 
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '目次データを登録しました。開始ページ順で掲載順を自動更新しました。';
+}
+
 // 同じ雑誌号の登録済み目次
 $stmt = $pdo->prepare("
     SELECT

@@ -68,6 +68,10 @@ $error = '';
 $search_q = trim((string)($_GET['work_q'] ?? ($_POST['work_q'] ?? '')));
 $work_results = search_works($pdo, $search_q);
 
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = 'メディアミックス情報を保存しました。';
+}
+
 $stmt = $pdo->prepare("
     SELECT wm.*, w.title AS work_title
     FROM work_mediamix wm
@@ -149,7 +153,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':status' => $status,
                 ':id' => $id,
             ]);
-            $message = 'メディアミックス情報を更新しました。';
+
+            header('Location: work_mediamix_edit.php?id=' . $id . '&saved=1');
+            exit;
         } catch (Exception $e) {
             $error = '更新エラー: ' . $e->getMessage();
         }

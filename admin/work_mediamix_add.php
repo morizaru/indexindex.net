@@ -121,19 +121,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':source_url' => $source_url !== '' ? $source_url : null,
                 ':status' => $status,
             ]);
-            $message = 'メディアミックス情報を登録しました。ID: ' . (int)$pdo->lastInsertId();
 
-            $work_id = 0;
-            $selected_work_title = '';
-            $media_type = 'tv_anime';
-            $title = '';
-            $start_date = '';
-            $end_date = '';
-            $company = '';
-            $broadcaster = '';
-            $note = '';
-            $source_url = '';
-            $status = 'active';
+            $new_id = (int)$pdo->lastInsertId();
+            header('Location: work_mediamix_edit.php?id=' . $new_id . '&saved=1');
+            exit;
         } catch (Exception $e) {
             $error = '登録エラー: ' . $e->getMessage();
         }

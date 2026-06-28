@@ -81,9 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $new_id = (int)$pdo->lastInsertId();
 
-                    $message = '雑誌本体を登録しました。ID：' . $new_id;
-
-                    $name = '';
+                    header('Location: magazine_edit.php?id=' . $new_id . '&saved=1');
+                    exit;
                 }
             }
         } catch (Exception $e) {

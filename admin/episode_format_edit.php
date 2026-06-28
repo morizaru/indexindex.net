@@ -159,6 +159,10 @@ $error = '';
 $has_number_style = episode_format_column_exists($pdo, 'number_style');
 $number_style_select = $has_number_style ? 'number_style' : 'NULL AS number_style';
 
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $message = '話数フォーマットを保存しました。';
+}
+
 // 現在データ取得
 $stmt = $pdo->prepare("
     SELECT
@@ -243,33 +247,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $stmt->execute($params);
 
-                $message = '話数フォーマットを更新しました。';
-
-                // 再取得
-                $stmt = $pdo->prepare("
-                    SELECT
-                        id,
-                        name,
-                        prefix,
-                        suffix,
-                        {$number_style_select},
-                        note,
-                        created_at,
-                        updated_at
-                    FROM episode_formats
-                    WHERE id = :id
-                    LIMIT 1
-                ");
-                $stmt->execute([
-                    ':id' => $format_id
-                ]);
-                $format = $stmt->fetch();
-
-                $name = $format['name'];
-                $prefix = $format['prefix'] ?? '';
-                $suffix = $format['suffix'] ?? '';
-                $number_style = normalize_number_style($format['number_style'] ?? '');
-                $note = $format['note'] ?? '';
+                header('Location: episode_format_edit.php?id=' . $format_id . '&saved=1');
+                exit;
             }
         } catch (Exception $e) {
             $error = '更新エラー：' . $e->getMessage();
