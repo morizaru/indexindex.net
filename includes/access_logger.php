@@ -254,7 +254,7 @@ if (!function_exists('ii_access_log')) {
         if ($ua === '') return false;
 
         return (bool)preg_match(
-            '/bot|crawl|spider|slurp|bingpreview|facebookexternalhit|line-poker|discordbot|twitterbot|google-inspectiontool|petalbot|bytespider|semrushbot|ahrefsbot|mj12bot|dotbot|yandexbot/i',
+            '/bot|crawl|spider|slurp|bingpreview|meta-externalagent|facebookexternalhit|facebot|line-poker|discordbot|twitterbot|google-inspectiontool|petalbot|bytespider|semrushbot|ahrefsbot|mj12bot|dotbot|yandexbot/i',
             $ua
         );
     }
@@ -405,7 +405,9 @@ if (!function_exists('ii_access_log')) {
         if (stripos($ua, 'Google-InspectionTool') !== false) return 'Google Inspection';
         if (stripos($ua, 'Bingbot') !== false) return 'Bingbot';
         if (stripos($ua, 'Slurp') !== false) return 'Yahoo Slurp';
+        if (stripos($ua, 'meta-externalagent') !== false) return 'Meta External Agent';
         if (stripos($ua, 'facebookexternalhit') !== false) return 'Facebook';
+        if (stripos($ua, 'Facebot') !== false) return 'Facebook';
         if (stripos($ua, 'Twitterbot') !== false) return 'Twitterbot';
         if (stripos($ua, 'Discordbot') !== false) return 'Discordbot';
         if (stripos($ua, 'PetalBot') !== false) return 'PetalBot';
