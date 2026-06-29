@@ -185,6 +185,133 @@ function get_or_create_creator_id($pdo, $name) {
     return (int)$pdo->lastInsertId();
 }
 
+function get_or_create_role_id_bulk($pdo, $role_name) {
+    $role_name = trim((string)$role_name);
+    if ($role_name === '') {
+        $role_name = 'author';
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT id
+        FROM roles
+        WHERE name = :name
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':name' => $role_name
+    ]);
+    $role = $stmt->fetch();
+
+    if ($role) {
+        return (int)$role['id'];
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO roles (name)
+        VALUES (:name)
+    ");
+    $stmt->execute([
+        ':name' => $role_name
+    ]);
+
+    return (int)$pdo->lastInsertId();
+}
+
+function split_creator_role_colon_bulk($creator_name, $default_role = 'author') {
+    $creator_name = trim((string)$creator_name);
+    $default_role = trim((string)$default_role);
+    if ($default_role === '') {
+        $default_role = 'author';
+    }
+
+    if ($creator_name === '') {
+        return null;
+    }
+
+    if (!preg_match('/[:：]/u', $creator_name, $match, PREG_OFFSET_CAPTURE)) {
+        return [
+            'name' => $creator_name,
+            'role' => $default_role,
+        ];
+    }
+
+    $colon_pos = $match[0][1];
+    $role = trim(substr($creator_name, 0, $colon_pos));
+    $name = trim(substr($creator_name, $colon_pos + strlen($match[0][0])));
+    $name = preg_replace('/^[\s\/／、]+|[\s\/／、]+$/u', '', $name);
+
+    if ($role === '' || $name === '') {
+        return [
+            'name' => $creator_name,
+            'role' => $default_role,
+        ];
+    }
+
+    return [
+        'name' => $name,
+        'role' => $role,
+    ];
+}
+
+function split_creator_role_colon_rows_bulk($creator_name) {
+    $creator_name = trim((string)$creator_name);
+    if ($creator_name === '') {
+        return [];
+    }
+
+    if (!preg_match('/[:：]/u', $creator_name, $match, PREG_OFFSET_CAPTURE)) {
+        return [];
+    }
+
+    $colon_pos = $match[0][1];
+    $before = trim(substr($creator_name, 0, $colon_pos));
+    $name = trim(substr($creator_name, $colon_pos + strlen($match[0][0])));
+    $name = preg_replace('/^[\s\/／、]+|[\s\/／、]+$/u', '', $name);
+
+    if ($before === '' || $name === '') {
+        return [];
+    }
+
+    $prefix = '';
+    $role = $before;
+    if (preg_match('/^(.*)[\s\/／、]+([^\s\/／、]+)$/u', $before, $parts)) {
+        $prefix = trim($parts[1]);
+        $role = trim($parts[2]);
+    }
+
+    if ($role === '') {
+        return [];
+    }
+
+    $items = [];
+    $seen = [];
+
+    if ($prefix !== '') {
+        foreach (split_creator_names($prefix) as $prefix_name) {
+            $key = "author\n" . $prefix_name;
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+
+            $items[] = [
+                'name' => $prefix_name,
+                'role' => 'author',
+            ];
+        }
+    }
+
+    $key = $role . "\n" . $name;
+    if (!isset($seen[$key])) {
+        $items[] = [
+            'name' => $name,
+            'role' => $role,
+        ];
+    }
+
+    return $items;
+}
+
 function split_creator_names($creator_name) {
     $creator_name = trim((string)$creator_name);
     if ($creator_name === '') {
@@ -256,8 +383,31 @@ function split_creator_roles_bulk($creator_name) {
     $prefix = trim(substr($creator_name, 0, $first_role_pos));
 
     if ($prefix !== '') {
-        foreach (split_creator_names($prefix) as $prefix_name) {
-            $key = "author\n" . $prefix_name;
+        $prefix_creator = split_creator_role_colon_bulk($prefix);
+        if ($prefix_creator !== null && $prefix_creator['role'] !== 'author') {
+            $prefix_items = [$prefix_creator];
+        } else {
+            $prefix_items = [];
+            foreach (split_creator_names($prefix) as $prefix_name) {
+                $prefix_items[] = [
+                    'name' => $prefix_name,
+                    'role' => 'author',
+                ];
+            }
+        }
+
+        foreach ($prefix_items as $prefix_item) {
+            $prefix_name = trim((string)($prefix_item['name'] ?? ''));
+            $prefix_role = trim((string)($prefix_item['role'] ?? 'author'));
+            if ($prefix_name === '') {
+                continue;
+            }
+
+            if ($prefix_role === '') {
+                $prefix_role = 'author';
+            }
+
+            $key = $prefix_role . "\n" . $prefix_name;
             if (isset($seen[$key])) {
                 continue;
             }
@@ -265,7 +415,7 @@ function split_creator_roles_bulk($creator_name) {
 
             $items[] = [
                 'name' => $prefix_name,
-                'role' => 'author',
+                'role' => $prefix_role,
             ];
         }
     }
@@ -298,6 +448,11 @@ function split_creator_roles_bulk($creator_name) {
 
 function build_creator_rows_from_name_bulk($creator_name) {
     $creator_rows = split_creator_roles_bulk($creator_name);
+    if (!empty($creator_rows)) {
+        return $creator_rows;
+    }
+
+    $creator_rows = split_creator_role_colon_rows_bulk($creator_name);
     if (!empty($creator_rows)) {
         return $creator_rows;
     }
@@ -757,19 +912,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     continue;
                 }
 
-                $creator_id = get_or_create_creator_id($pdo, $creator_name_one);
                 $creator_role = trim((string)($creator_row['role'] ?? ''));
+                $parsed_creator = split_creator_role_colon_bulk($creator_name_one, $creator_role);
+
+                if ($parsed_creator !== null) {
+                    $creator_name_one = trim((string)$parsed_creator['name']);
+                    $creator_role = trim((string)$parsed_creator['role']);
+                }
+
+                if ($creator_name_one === '') {
+                    continue;
+                }
+
+                if ($creator_role === '') {
+                    $creator_role = 'author';
+                }
+
+                $creator_id = get_or_create_creator_id($pdo, $creator_name_one);
+                $role_id = get_or_create_role_id_bulk($pdo, $creator_role);
 
                 $stmt = $pdo->prepare("
                     INSERT INTO content_creators (
                         content_id,
                         creator_id,
+                        role_id,
                         role,
                         display_order,
                         is_visible
                     ) VALUES (
                         :content_id,
                         :creator_id,
+                        :role_id,
                         :role,
                         :display_order,
                         1
@@ -778,6 +951,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([
                     ':content_id' => $content_id,
                     ':creator_id' => $creator_id,
+                    ':role_id' => $role_id,
                     ':role' => $creator_role,
                     ':display_order' => $display_order
                 ]);
