@@ -23,7 +23,7 @@ $name_search = '';
 $name_romaji = '';
 $publication_frequency = '';
 $note = '';
-$publication_frequency_options = ['', '週刊', '月刊', '隔週刊', '隔月刊', '月2回刊', '季刊', '日刊', '不定期刊'];
+$publication_frequency_options = ['', '週刊', '隔週刊', '月2回刊', '月刊', '隔月刊', '季刊', '日刊', '不定期刊'];
 
 // 出版社一覧
 $stmt = $pdo->query("

@@ -26,7 +26,7 @@ if ($magazine_id <= 0) {
 
 $message = '';
 $error = '';
-$publication_frequency_options = ['', '週刊', '月刊', '隔週刊', '隔月刊', '月2回刊', '季刊', '日刊', '不定期刊'];
+$publication_frequency_options = ['', '週刊', '隔週刊', '月2回刊', '月刊', '隔月刊', '季刊', '日刊', '不定期刊'];
 
 if (isset($_GET['saved']) && $_GET['saved'] === '1') {
     $message = '雑誌本体を保存しました。';
