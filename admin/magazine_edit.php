@@ -9,6 +9,11 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function nullable_text($value) {
+    $value = trim((string)$value);
+    return ($value !== '') ? $value : null;
+}
+
 $magazine_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -21,6 +26,7 @@ if ($magazine_id <= 0) {
 
 $message = '';
 $error = '';
+$publication_frequency_options = ['', '週刊', '月刊', '隔週刊', '隔月刊', '月2回刊', '季刊', '日刊', '不定期刊'];
 
 if (isset($_GET['saved']) && $_GET['saved'] === '1') {
     $message = '雑誌本体を保存しました。';
@@ -40,6 +46,10 @@ $stmt = $pdo->prepare("
         m.id,
         m.publisher_id,
         m.name,
+        m.name_search,
+        m.name_romaji,
+        m.publication_frequency,
+        m.note,
         m.created_at,
         m.updated_at,
         p.name AS publisher_name
@@ -59,11 +69,23 @@ if (!$magazine) {
 
 $name = $magazine['name'];
 $publisher_id = (int)$magazine['publisher_id'];
+$name_search = $magazine['name_search'] ?? '';
+$name_romaji = $magazine['name_romaji'] ?? '';
+$publication_frequency = $magazine['publication_frequency'] ?? '';
+$note = $magazine['note'] ?? '';
 
 // 更新処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $publisher_id = isset($_POST['publisher_id']) ? (int)$_POST['publisher_id'] : 0;
+    $name_search = trim($_POST['name_search'] ?? '');
+    $name_romaji = trim($_POST['name_romaji'] ?? '');
+    $publication_frequency = trim($_POST['publication_frequency'] ?? '');
+    $note = trim($_POST['note'] ?? '');
+
+    if (!in_array($publication_frequency, $publication_frequency_options, true)) {
+        $publication_frequency = '';
+    }
 
     if ($name === '') {
         $error = '雑誌名を入力してください。';
@@ -109,12 +131,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         UPDATE magazines
                         SET
                             publisher_id = :publisher_id,
-                            name = :name
+                            name = :name,
+                            name_search = :name_search,
+                            name_romaji = :name_romaji,
+                            publication_frequency = :publication_frequency,
+                            note = :note
                         WHERE id = :id
                     ");
                     $stmt->execute([
                         ':publisher_id' => $publisher_id,
                         ':name' => $name,
+                        ':name_search' => nullable_text($name_search),
+                        ':name_romaji' => nullable_text($name_romaji),
+                        ':publication_frequency' => nullable_text($publication_frequency),
+                        ':note' => nullable_text($note),
                         ':id' => $magazine_id
                     ]);
 
@@ -187,6 +217,10 @@ $issues = $stmt->fetchAll();
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 16px;
+        }
+
+        .form-grid .full-row {
+            grid-column: 1 / -1;
         }
 
         .links {
@@ -365,6 +399,33 @@ $issues = $stmt->fetchAll();
                     雑誌名 <span class="required">必須</span>
                 </label>
                 <input type="text" name="name" value="<?= h($name) ?>" placeholder="例：COM">
+            </div>
+
+            <div class="form-row">
+                <label>検索用名称</label>
+                <input type="text" name="name_search" value="<?= h($name_search) ?>">
+            </div>
+
+            <div class="form-row">
+                <label>ローマ字</label>
+                <input type="text" name="name_romaji" value="<?= h($name_romaji) ?>">
+            </div>
+
+            <div class="form-row">
+                <label>刊行頻度</label>
+                <select name="publication_frequency">
+                    <option value="">未選択</option>
+                    <?php foreach (array_slice($publication_frequency_options, 1) as $option): ?>
+                        <option value="<?= h($option) ?>" <?= ($publication_frequency === $option) ? 'selected' : '' ?>>
+                            <?= h($option) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="form-row full-row">
+                <label>備考</label>
+                <textarea name="note"><?= h($note) ?></textarea>
             </div>
         </div>
 

@@ -9,8 +9,23 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function shorten_text($value, $length = 30) {
+    $value = trim((string)$value);
+    if ($value === '') {
+        return '';
+    }
+    if (mb_strlen($value, 'UTF-8') <= $length) {
+        return $value;
+    }
+    return mb_substr($value, 0, $length, 'UTF-8') . '…';
+}
+
 $message = '';
 $error = '';
+
+$stmt = $pdo->query("SHOW COLUMNS FROM magazines");
+$magazine_columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+$has_name_kana = in_array('name_kana', $magazine_columns, true);
 
 // 削除処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
@@ -55,6 +70,11 @@ $sql = "
     SELECT
         m.id,
         m.name,
+        " . ($has_name_kana ? "m.name_kana" : "NULL AS name_kana") . ",
+        m.name_search,
+        m.name_romaji,
+        m.publication_frequency,
+        m.note,
         m.publisher_id,
         p.name AS publisher_name,
         COUNT(mi.id) AS issue_count,
@@ -184,6 +204,10 @@ $magazines = $stmt->fetchAll();
             text-align: center;
         }
 
+        .extra {
+            width: 190px;
+        }
+
         .actions {
             width: 210px;
             white-space: nowrap;
@@ -268,6 +292,7 @@ $magazines = $stmt->fetchAll();
 
             td.magazine::before { content: "雑誌"; }
             td.publisher::before { content: "出版社"; }
+            td.extra::before { content: "追加情報"; }
             td.num::before { content: "号数"; }
             td.year::before { content: "収録年"; }
             td.actions::before { content: "操作"; }
@@ -300,7 +325,7 @@ $magazines = $stmt->fetchAll();
     </div>
 
     <div class="filter-box">
-        <input type="text" id="magazineFilter" placeholder="雑誌名・出版社名・年で絞り込み">
+        <input type="text" id="magazineFilter" placeholder="雑誌名・検索用名称・ローマ字・備考・出版社名・年で絞り込み">
     </div>
 
     <?php if (empty($magazines)): ?>
@@ -314,6 +339,7 @@ $magazines = $stmt->fetchAll();
                 <tr>
                     <th>雑誌名</th>
                     <th>出版社</th>
+                    <th class="extra">追加情報</th>
                     <th class="num">登録号数</th>
                     <th class="year">収録年</th>
                     <th>更新日時</th>
@@ -324,8 +350,19 @@ $magazines = $stmt->fetchAll();
             <?php foreach ($magazines as $row): ?>
                 <?php
                     $can_delete = ((int)$row['issue_count'] === 0);
+                    $search_text = implode(' ', [
+                        $row['name'],
+                        $row['name_kana'],
+                        $row['name_search'],
+                        $row['name_romaji'],
+                        $row['publication_frequency'],
+                        $row['note'],
+                        $row['publisher_name'],
+                        $row['first_year'],
+                        $row['last_year']
+                    ]);
                 ?>
-                <tr>
+                <tr data-search="<?= h($search_text) ?>">
                     <td class="magazine">
                         <strong><?= h($row['name']) ?></strong>
                         <div class="small">
@@ -338,6 +375,21 @@ $magazines = $stmt->fetchAll();
                         <div class="small">
                             出版社ID：<?= h($row['publisher_id']) ?>
                         </div>
+                    </td>
+
+                    <td class="extra">
+                        <?php if (!empty($row['publication_frequency'])): ?>
+                            <?= h($row['publication_frequency']) ?><br>
+                        <?php endif; ?>
+                        <?php if (!empty($row['name_romaji'])): ?>
+                            <span class="small">ローマ字：<?= h($row['name_romaji']) ?></span><br>
+                        <?php endif; ?>
+                        <?php if (!empty($row['name_search'])): ?>
+                            <span class="small">検索用：<?= h($row['name_search']) ?></span><br>
+                        <?php endif; ?>
+                        <?php if (!empty($row['note'])): ?>
+                            <span class="small">備考：<?= h(shorten_text($row['note'])) ?></span>
+                        <?php endif; ?>
                     </td>
 
                     <td class="num"><?= h($row['issue_count']) ?></td>
@@ -398,7 +450,7 @@ if (filterInput && table) {
         const rows = table.querySelectorAll('tbody tr');
 
         rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
+            const text = (row.dataset.search || row.textContent).toLowerCase();
             row.style.display = (!keyword || text.includes(keyword)) ? '' : 'none';
         });
     });
