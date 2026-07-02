@@ -102,7 +102,6 @@ if ($q !== '') {
             SELECT
                 w.id AS work_id,
                 w.title AS work_title,
-                w.title_sub AS work_title_sub,
                 w.publication_type,
                 COUNT(DISTINCT ic.id) AS content_count,
                 MIN(mi.issue_year) AS first_year,
@@ -114,15 +113,12 @@ if ($q !== '') {
                 ON mi.id = ic.issue_id
                AND mi.status = 'approved'
             WHERE w.title LIKE :keyword
-               OR w.title_sub LIKE :keyword
             GROUP BY
                 w.id,
                 w.title,
-                w.title_sub,
                 w.publication_type
             ORDER BY
                 w.title ASC,
-                w.title_sub ASC,
                 w.id ASC
             LIMIT {$limit}
         ";
@@ -303,6 +299,7 @@ foreach ($all_result_tabs as $tab_key => $tab_label) {
             margin: 12px 0;
         }
 
+        .page-description,
         .description-box {
             margin: 0 0 18px;
             padding: 14px 16px;
@@ -311,6 +308,10 @@ foreach ($all_result_tabs as $tab_key => $tab_label) {
             border-radius: 8px;
             color: #444;
             line-height: 1.8;
+        }
+
+        .page-description strong {
+            color: #222;
         }
 
         .description-box p {
@@ -329,6 +330,16 @@ foreach ($all_result_tabs as $tab_key => $tab_label) {
             border-radius: 8px;
             color: #444;
             line-height: 1.7;
+        }
+
+        .help-box {
+            background: #f7f7f7;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin: 14px 0;
+            color: #444;
+            line-height: 1.8;
         }
 
         .example-box h2 {
@@ -542,9 +553,9 @@ require_once __DIR__ . '/includes/header.php';
 
     <h1>詳細検索</h1>
 
-    <div class="description-box">
-        <p>登録済みの漫画雑誌目次を、作品名、作者名、雑誌名から検索できます。該当する雑誌号や掲載データへの手がかりを探すためのページです。</p>
-        <p>入力例：週刊少年サンデー、ドラえもん、藤子不二雄 など</p>
+    <div class="page-description">
+        <p><strong>INDEXINDEX検索について</strong></p>
+        <p>INDEXINDEXに登録されている漫画雑誌の目次情報を、作品名、作者名、雑誌名から検索できます。検索結果から、雑誌号・作品・人物の詳細ページへ移動し、掲載順、開始ページ、掲載号などを確認できます。</p>
     </div>
 
     <form method="get" action="search.php" class="search-form">
@@ -563,7 +574,10 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php if ($q === ''): ?>
 
-        <p class="notice">検索キーワードを入力し、検索対象を選んでください。作品名、作者名、雑誌名の一部だけでも検索できます。</p>
+        <div class="help-box">
+            <strong>検索で調べられること</strong><br>
+            古い漫画雑誌の掲載情報を調べるときに、作品名の一部、作者名、雑誌名から手がかりを探せます。作品・人物・雑誌号のページへ移動して、掲載順や開始ページ、掲載された号を確認できます。
+        </div>
         <div class="search-guide-grid" aria-label="検索対象の説明">
             <div class="search-guide-card">
                 <div class="search-guide-title">作品名検索</div>
@@ -581,9 +595,9 @@ require_once __DIR__ . '/includes/header.php';
         <div class="example-box">
             <h2>検索例</h2>
             <ul class="example-list">
-                <li>雑誌名で探す：週刊少年サンデー、COM、少年ジャンプ など</li>
-                <li>作品名で探す：ドラえもん、あしたのジョー など</li>
-                <li>作者名で探す：藤子不二雄、ちばてつや など</li>
+                <li>作品名で探す：ドラゴンボール、ゴルゴ13、北斗の拳</li>
+                <li>作者名で探す：手塚治虫、石ノ森章太郎、藤子不二雄</li>
+                <li>雑誌名で探す：週刊少年ジャンプ、週刊少年サンデー、漫画アクション</li>
             </ul>
             <p>検索結果からは、雑誌号、掲載作品、作者ページ、掲載順の情報を順に確認できます。</p>
         </div>
@@ -601,9 +615,21 @@ require_once __DIR__ . '/includes/header.php';
 
         <?php if ($total_results === 0): ?>
 
-            <p class="notice">該当するデータは見つかりませんでした。表記を変える、検索対象を切り替える、キーワードを短くするなどして再検索してください。雑誌名・作品名・作者名のどれを探しているかに合わせて、検索対象のラジオボタンを変更できます。</p>
+            <div class="help-box">
+                <strong>該当するデータは見つかりませんでした。</strong><br>
+                作品名・作者名・雑誌名の表記を変えて、もう一度検索してください。
+                <ul class="example-list">
+                    <li>漢字・かな・カタカナなど表記ゆれを試す</li>
+                    <li>作者名の一部だけで検索する</li>
+                    <li>雑誌名を短くして検索する</li>
+                    <li>検索対象を「全て」「作品名」「作者名」「雑誌名」で切り替える</li>
+                </ul>
+                データは順次追加・整理しています。
+            </div>
 
         <?php elseif ($target === 'all'): ?>
+
+            <p class="notice">検索結果から、作品・人物・雑誌号の詳細ページを確認できます。</p>
 
             <div class="result-tabs" role="tablist" aria-label="検索結果カテゴリ">
                 <?php foreach ($all_result_tabs as $tab_key => $tab_label): ?>
@@ -675,9 +701,6 @@ require_once __DIR__ . '/includes/header.php';
                                     <div class="main-name">
                                         <a href="work.php?work_id=<?= h($row['work_id']) ?>"><?= h($row['work_title']) ?></a>
                                     </div>
-                                    <?php if (!empty($row['work_title_sub'])): ?>
-                                        <div class="sub-name"><?= h($row['work_title_sub']) ?></div>
-                                    <?php endif; ?>
                                 </td>
                                 <td class="type-cell"><?= h($row['publication_type'] ?? '') ?></td>
                                 <td class="count-cell"><?= h($row['content_count']) ?>件</td>
@@ -782,9 +805,6 @@ require_once __DIR__ . '/includes/header.php';
                             <div class="main-name">
                                 <a href="work.php?work_id=<?= h($row['work_id']) ?>"><?= h($row['work_title']) ?></a>
                             </div>
-                            <?php if (!empty($row['work_title_sub'])): ?>
-                                <div class="sub-name"><?= h($row['work_title_sub']) ?></div>
-                            <?php endif; ?>
                         </td>
                         <td class="type-cell"><?= h($row['publication_type'] ?? '') ?></td>
                         <td class="count-cell"><?= h($row['content_count']) ?>件</td>

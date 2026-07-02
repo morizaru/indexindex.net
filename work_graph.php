@@ -303,7 +303,7 @@ if ($magazine_id > 0) {
 }
 
 if ($work_q !== '') {
-    $list_where[] = "(w.title LIKE :work_q OR w.title_sub LIKE :work_q)";
+    $list_where[] = "w.title LIKE :work_q";
     $list_params[':work_q'] = '%' . $work_q . '%';
 }
 
@@ -356,7 +356,6 @@ $sql = "
     SELECT
         w.id,
         w.title,
-        w.title_sub,
         w.publication_type,
         COUNT(DISTINCT ic.id) AS content_count,
         MIN(mi.issue_year) AS first_year,
@@ -369,7 +368,7 @@ $sql = "
     JOIN magazines m ON mi.magazine_id = m.id
     JOIN publishers p ON m.publisher_id = p.id
     {$list_where_sql}
-    GROUP BY w.id, w.title, w.title_sub, w.publication_type
+    GROUP BY w.id, w.title, w.publication_type
     ORDER BY {$order_by_sql}
     LIMIT :limit OFFSET :offset
 ";
@@ -408,7 +407,7 @@ if ($work_id > 0) {
     }
 
     if ($work_q !== '') {
-        $year_where[] = "(w.title LIKE :work_q OR w.title_sub LIKE :work_q)";
+        $year_where[] = "w.title LIKE :work_q";
         $year_params[':work_q'] = '%' . $work_q . '%';
     }
 
@@ -476,7 +475,7 @@ if ($has_graph) {
     }
 
     if ($work_q !== '') {
-        $where[] = "(w.title LIKE :work_q OR w.title_sub LIKE :work_q)";
+        $where[] = "w.title LIKE :work_q";
         $params[':work_q'] = '%' . $work_q . '%';
     }
 
@@ -716,6 +715,7 @@ if ($has_graph) {
             line-height: 1.8;
         }
 
+        .page-description,
         .description-box {
             margin: 0 0 20px;
             padding: 14px 16px;
@@ -724,6 +724,11 @@ if ($has_graph) {
             border-radius: 8px;
             color: #444;
             line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .page-description strong {
+            color: #222;
         }
 
         .description-box p {
@@ -732,6 +737,22 @@ if ($has_graph) {
 
         .description-box p:last-child {
             margin-bottom: 0;
+        }
+
+        .help-box {
+            background: #f7f7f7;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin: 14px 0;
+            color: #444;
+            line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .example-list {
+            margin: 8px 0 0;
+            padding-left: 1.4em;
         }
 
         .chart-wrap {
@@ -1103,9 +1124,10 @@ require_once __DIR__ . '/includes/header.php';
 
     <h1>作品連載順グラフ</h1>
 
-    <div class="description-box">
-        <p>作品ごとの掲載順の推移を、雑誌号ごとの目次データをもとにグラフで確認できます。</p>
-        <p>作品を選択すると掲載順の変化と掲載データ一覧を表示します。登録データが少ない作品や、条件に合う目次がない場合はグラフが表示されないことがあります。</p>
+    <div class="page-description">
+        <p><strong>作品掲載順グラフについて</strong></p>
+        <p>作品ごとの掲載順の推移を、雑誌号ごとの目次データをもとにグラフで確認できます。連載中の掲載位置の変化を見たいときに、作品名や人物名、雑誌、年で絞り込んで使えます。</p>
+        <p>作品によっては掲載号数が少ない、掲載順が未登録、条件に合う目次が少ないなどの理由で、グラフが表示されない場合があります。</p>
     </div>
 
     <form method="get" action="work_graph.php" class="filter-form">
@@ -1214,9 +1236,16 @@ require_once __DIR__ . '/includes/header.php';
 
         <?php if (empty($rows)): ?>
 
-            <p class="empty">この条件では掲載順グラフにできるデータがありません。出版社、雑誌、年の条件を広げるか、作品一覧から別の作品を選んでください。</p>
+            <div class="help-box">
+                <strong>この作品は、掲載順グラフを表示できるだけのデータがまだ登録されていません。</strong><br>
+                目次データは順次追加・整理しています。掲載号数が少ない、掲載順が未登録、開始ページ情報が不足している、または出版社・雑誌・年の条件が狭い場合は、グラフが表示されないことがあります。
+            </div>
 
         <?php else: ?>
+
+            <div class="help-box">
+                このグラフは、登録済みの雑誌号ごとの掲載順をもとに表示しています。掲載順の数字が小さいほど、目次上では前の方に掲載されています。
+            </div>
 
             <?php if (!empty($graph_years)): ?>
                 <form method="get" action="work_graph.php" class="graph-year-box">
@@ -1399,6 +1428,18 @@ require_once __DIR__ . '/includes/header.php';
 
         <?php endif; ?>
 
+    <?php else: ?>
+
+        <div class="help-box">
+            <strong>掲載順の推移を見るには、作品を選択してください。</strong><br>
+            作品名または人物名で絞り込み、作品一覧の「グラフ」から対象作品を選ぶと、登録済みの雑誌号ごとの掲載順を確認できます。
+            <ul class="example-list">
+                <li>作品名で検索して、対象作品のグラフを表示する</li>
+                <li>人物名で絞り込み、関連する連載作品を探す</li>
+                <li>出版社・雑誌・年を指定して、掲載範囲を絞る</li>
+            </ul>
+        </div>
+
     <?php endif; ?>
 
     <h2>作品一覧</h2>
@@ -1437,10 +1478,6 @@ require_once __DIR__ . '/includes/header.php';
                         <a href="work.php?work_id=<?= h($row['id']) ?>">
                             <span class="title-main"><?= h($row['title']) ?></span>
                         </a>
-
-                        <?php if (!empty($row['title_sub'])): ?>
-                            <div class="title-sub"><?= h($row['title_sub']) ?></div>
-                        <?php endif; ?>
 
                         <div class="small">
                             <?php if (!empty($row['publisher_names'])): ?>
