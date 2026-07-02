@@ -472,9 +472,11 @@ $stmt->execute([
     ':issue_id' => $issue_id
 ]);
 $contents = $stmt->fetchAll();
+$content_count = count($contents);
+$should_noindex = ($content_count === 0);
 
 $issue_summary = [
-    'content_count' => count($contents),
+    'content_count' => $content_count,
     'creator_ids' => [],
     'badges' => [
         '読切' => 0,
@@ -519,7 +521,7 @@ $issue_description_date = format_issue_description_date($issue);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <?php if (empty($contents)): ?>
+    <?php if (!empty($should_noindex)): ?>
         <meta name="robots" content="noindex,follow">
     <?php endif; ?>
     <title><?= h($issue_display_name) ?> - INDEXINDEX</title>
@@ -887,7 +889,7 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php if (empty($contents)): ?>
 
-        <p class="empty">この雑誌号にはまだ目次が登録されていません。目次データが追加されると、掲載作品、作者、掲載順、開始ページがここに表示されます。現在は雑誌名、号数、発行日、発売日などの基本情報のみを確認できます。</p>
+        <p class="empty">この雑誌号にはまだ目次が登録されていません。データは順次追加・整理しています。</p>
 
     <?php else: ?>
 

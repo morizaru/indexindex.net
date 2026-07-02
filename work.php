@@ -278,6 +278,7 @@ $stmt->execute([
     ':work_id' => $work_id
 ]);
 $work_total_content_count = (int)($stmt->fetch()['total_count'] ?? 0);
+$should_noindex = ($work_total_content_count === 0);
 
 $keyword_where_sql = '';
 $keyword_params = [];
@@ -510,7 +511,7 @@ function format_episode_no($row, $work) {
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <?php if ($work_total_content_count === 0): ?>
+    <?php if (!empty($should_noindex)): ?>
         <meta name="robots" content="noindex,follow">
     <?php endif; ?>
     <title><?= h($work['title']) ?> - 作品詳細 - INDEXINDEX</title>
@@ -977,7 +978,7 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php else: ?>
 
-        <p class="empty">この作品の掲載データはまだ登録されていません。掲載された雑誌号の目次データが追加されると、雑誌名、号数、掲載順、ページ、関係人物を確認できるようになります。</p>
+        <p class="empty">この作品の掲載情報はまだ登録されていません。データは順次追加・整理しています。</p>
 
     <?php endif; ?>
 

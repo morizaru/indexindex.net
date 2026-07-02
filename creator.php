@@ -201,6 +201,7 @@ $stmt->execute([
     ':creator_id' => $creator_id
 ]);
 $creator_total_content_count = (int)($stmt->fetch()['total_count'] ?? 0);
+$should_noindex = ($creator_total_content_count === 0);
 
 // 総目次件数
 $count_sql = "
@@ -315,7 +316,7 @@ $sort_labels = [
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <?php if ($creator_total_content_count === 0): ?>
+    <?php if (!empty($should_noindex)): ?>
         <meta name="robots" content="noindex,follow">
     <?php endif; ?>
     <title><?= h($creator['name']) ?> - 人物詳細 - INDEXINDEX</title>
@@ -826,7 +827,7 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php if (empty($contents)): ?>
 
-        <p class="empty">この人物に紐づく掲載データはまだ登録されていません。関連する目次データが追加されると、作品名、雑誌名、号数、掲載順、ページを確認できるようになります。</p>
+        <p class="empty">この人物に関連する掲載情報はまだ登録されていません。データは順次追加・整理しています。</p>
 
     <?php else: ?>
 
