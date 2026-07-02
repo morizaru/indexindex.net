@@ -163,8 +163,25 @@ $rows = $stmt->fetchAll();
             font-size: 16px;
         }
         table { width: 100%; border-collapse: collapse; background: #fff; }
+        .col-media-type { width: 10%; }
+        .col-media-title { width: 26%; }
+        .col-work-title { width: 16%; }
         th, td { border: 1px solid #ddd; padding: 10px; vertical-align: top; overflow-wrap: anywhere; }
         th { background: #eee; text-align: left; }
+        .media-title {
+            font-weight: bold;
+        }
+        .media-type,
+        .start-date,
+        .end-date,
+        .broadcaster,
+        .company,
+        .source-url {
+            font-size: 0.9em;
+        }
+        .media-type {
+            font-weight: bold;
+        }
         .note-row .note-cell {
             background: #fafafa;
         }
@@ -230,11 +247,21 @@ require_once __DIR__ . '/includes/header.php';
         <p class="empty">メディアミックス情報はありません。</p>
     <?php else: ?>
         <table>
+            <colgroup>
+                <col class="col-media-type">
+                <col class="col-media-title">
+                <col class="col-work-title">
+                <col>
+                <col>
+                <col>
+                <col>
+                <col>
+            </colgroup>
             <thead>
                 <tr>
                     <th>放送形態</th>
-                    <th>作品名</th>
                     <th>タイトル</th>
+                    <th>作品名</th>
                     <th>開始日</th>
                     <th>終了日</th>
                     <th>放送局等</th>
@@ -246,8 +273,8 @@ require_once __DIR__ . '/includes/header.php';
             <tbody class="media-item">
                 <tr>
                     <td class="media-type" rowspan="2"><?= h(mediamix_type_label($row['media_type'])) ?></td>
-                    <td class="work-title"><a href="work.php?id=<?= h($row['work_id']) ?>"><?= h($row['work_title']) ?></a></td>
                     <td class="media-title"><?= h($row['title']) ?></td>
+                    <td class="work-title"><a href="work.php?id=<?= h($row['work_id']) ?>"><?= h($row['work_title']) ?></a></td>
                     <td class="start-date"><?= h($row['start_date']) ?></td>
                     <td class="end-date"><?= h($row['end_date']) ?></td>
                     <td class="broadcaster"><?= h($row['broadcaster']) ?></td>
