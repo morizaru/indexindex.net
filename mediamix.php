@@ -17,9 +17,10 @@ function mediamix_type_labels() {
         'anime_movie' => 'アニメ映画',
         'live_action_movie' => '実写映画',
         'tv_drama' => 'TVドラマ',
+        'web_anime' => 'Webアニメ',
+        'web_drama' => 'WEBドラマ',
         'stage' => '舞台',
         'ova' => 'OVA',
-        'web_anime' => 'Webアニメ',
         'game' => 'ゲーム',
         'other' => 'その他',
     ];
