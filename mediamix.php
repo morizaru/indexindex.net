@@ -230,10 +230,10 @@ require_once __DIR__ . '/includes/header.php';
                     <th>タイトル</th>
                     <th>開始日</th>
                     <th>終了日</th>
-                    <th>broadcaster</th>
-                    <th>company</th>
-                    <th>note</th>
-                    <th>source_url</th>
+                    <th>放送局等</th>
+                    <th>制作会社</th>
+                    <th>備考</th>
+                    <th>公式サイト</th>
                 </tr>
             </thead>
             <tbody>
