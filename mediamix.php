@@ -45,14 +45,15 @@ function mediamix_url($type, $year) {
 
 $media_types = mediamix_type_labels();
 $type = trim((string)($_GET['type'] ?? ''));
-$year = trim((string)($_GET['year'] ?? ''));
+$current_year = date('Y');
+$year = array_key_exists('year', $_GET) ? trim((string)$_GET['year']) : $current_year;
 
 if (!isset($media_types[$type])) {
     $type = '';
 }
 
 if ($year !== '' && !preg_match('/^[0-9]{4}$/', $year)) {
-    $year = '';
+    $year = $current_year;
 }
 
 $stmt = $pdo->query("
