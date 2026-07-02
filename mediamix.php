@@ -15,9 +15,9 @@ function mediamix_type_labels() {
     return [
         'tv_anime' => 'TVアニメ',
         'anime_movie' => 'アニメ映画',
-        'live_action_movie' => '実写映画',
-        'tv_drama' => 'TVドラマ',
         'web_anime' => 'Webアニメ',
+        'tv_drama' => 'TVドラマ',
+        'live_action_movie' => '実写映画',
         'web_drama' => 'WEBドラマ',
         'stage' => '舞台',
         'ova' => 'OVA',
