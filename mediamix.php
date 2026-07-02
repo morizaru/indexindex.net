@@ -165,6 +165,12 @@ $rows = $stmt->fetchAll();
         table { width: 100%; border-collapse: collapse; background: #fff; }
         th, td { border: 1px solid #ddd; padding: 10px; vertical-align: top; overflow-wrap: anywhere; }
         th { background: #eee; text-align: left; }
+        .note-row .note-cell {
+            background: #fafafa;
+        }
+        .note-row .note-cell::before {
+            content: none;
+        }
         .small { color: #666; font-size: 13px; line-height: 1.5; }
         .empty { color: #666; padding: 16px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 6px; }
         @media (max-width: 800px) {
@@ -172,7 +178,8 @@ $rows = $stmt->fetchAll();
             .container { padding: 12px; }
             table, thead, tbody, tr, th, td { display: block; }
             thead { display: none; }
-            tr { border: 1px solid #ddd; margin-bottom: 12px; padding: 8px; }
+            tbody.media-item { border: 1px solid #ddd; margin-bottom: 12px; padding: 8px; }
+            tr { border: none; margin: 0; padding: 0; }
             td { border: none; padding: 4px 0; }
             td::before { font-weight: bold; display: inline-block; width: 120px; color: #555; }
             td.media-type::before { content: "放送形態"; }
@@ -232,29 +239,30 @@ require_once __DIR__ . '/includes/header.php';
                     <th>終了日</th>
                     <th>放送局等</th>
                     <th>制作会社</th>
-                    <th>備考</th>
                     <th>公式サイト</th>
                 </tr>
             </thead>
-            <tbody>
             <?php foreach ($rows as $row): ?>
+            <tbody class="media-item">
                 <tr>
-                    <td class="media-type"><?= h(mediamix_type_label($row['media_type'])) ?></td>
+                    <td class="media-type" rowspan="2"><?= h(mediamix_type_label($row['media_type'])) ?></td>
                     <td class="work-title"><a href="work.php?id=<?= h($row['work_id']) ?>"><?= h($row['work_title']) ?></a></td>
                     <td class="media-title"><?= h($row['title']) ?></td>
                     <td class="start-date"><?= h($row['start_date']) ?></td>
                     <td class="end-date"><?= h($row['end_date']) ?></td>
                     <td class="broadcaster"><?= h($row['broadcaster']) ?></td>
                     <td class="company"><?= h($row['company']) ?></td>
-                    <td class="note-cell"><?= h($row['note']) ?></td>
                     <td class="source-url">
                         <?php if (!empty($row['source_url'])): ?>
-                            <a href="<?= h($row['source_url']) ?>" target="_blank" rel="noopener">source</a>
+                            <a href="<?= h($row['source_url']) ?>" target="_blank" rel="noopener">公式サイト</a>
                         <?php endif; ?>
                     </td>
                 </tr>
-            <?php endforeach; ?>
+                <tr class="note-row">
+                    <td class="note-cell" colspan="7"><?= h($row['note']) ?></td>
+                </tr>
             </tbody>
+            <?php endforeach; ?>
         </table>
     <?php endif; ?>
 </div>
