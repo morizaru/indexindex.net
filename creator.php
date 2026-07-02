@@ -203,6 +203,33 @@ $stmt->execute([
 $creator_total_content_count = (int)($stmt->fetch()['total_count'] ?? 0);
 $should_noindex = ($creator_total_content_count === 0);
 
+$stmt = $pdo->prepare("
+    SELECT
+        COUNT(DISTINCT ic.work_id) AS work_count,
+        COUNT(DISTINCT ic.issue_id) AS issue_count,
+        GROUP_CONCAT(
+            DISTINCT
+            CASE
+                WHEN cc.role IS NOT NULL
+                     AND cc.role <> ''
+                THEN cc.role
+                ELSE 'author'
+            END
+            ORDER BY cc.role
+            SEPARATOR ' / '
+        ) AS roles
+    FROM content_creators cc
+    JOIN issue_contents ic ON cc.content_id = ic.id
+    WHERE cc.creator_id = :creator_id
+");
+$stmt->execute([
+    ':creator_id' => $creator_id
+]);
+$creator_summary = $stmt->fetch() ?: [];
+$creator_work_count = (int)($creator_summary['work_count'] ?? 0);
+$creator_issue_count = (int)($creator_summary['issue_count'] ?? 0);
+$creator_roles = trim((string)($creator_summary['roles'] ?? ''));
+
 // 総目次件数
 $count_sql = "
     SELECT COUNT(DISTINCT ic.id) AS total_count
@@ -385,6 +412,21 @@ $sort_labels = [
             margin-bottom: 16px;
             color: #666;
             line-height: 1.7;
+        }
+
+        .page-description {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin: 16px 0 20px;
+            color: #444;
+            line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .page-description strong {
+            color: #222;
         }
 
         .filter-box {
@@ -734,6 +776,14 @@ require_once __DIR__ . '/includes/header.php';
                 <a href="work.php?work_id=<?= h($creator['debut_work_id']) ?>"><?= h($creator['debut_work_title']) ?></a>
             </div>
         <?php endif; ?>
+
+        <div class="page-description">
+            <?php if ($creator_total_content_count > 0): ?>
+                このページでは、<strong><?= h($creator['name']) ?></strong>に関連する掲載情報を掲載しています。登録済みの掲載<?= h($creator_total_content_count) ?>件、関連作品<?= h($creator_work_count) ?>件、関連雑誌号<?= h($creator_issue_count) ?>件について、作品、雑誌号、役割、掲載順などを確認できます。<?= $creator_roles !== '' ? '主な役割：' . h($creator_roles) . '。' : '' ?>
+            <?php else: ?>
+                この人物に関連する掲載情報はまだ登録されていません。データは順次追加・整理しています。
+            <?php endif; ?>
+        </div>
     </section>
 
     <section class="creator-list-block" aria-label="掲載リスト">

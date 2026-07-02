@@ -460,6 +460,24 @@ $stmt->execute([
 ]);
 $mediamix_rows = $stmt->fetchAll();
 
+$stmt = $pdo->prepare("
+    SELECT
+        COUNT(DISTINCT ic.issue_id) AS issue_count,
+        COUNT(DISTINCT mi.magazine_id) AS magazine_count,
+        COUNT(DISTINCT cc.creator_id) AS creator_count
+    FROM issue_contents ic
+    JOIN magazine_issues mi ON ic.issue_id = mi.id
+    LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
+    WHERE ic.work_id = :work_id
+");
+$stmt->execute([
+    ':work_id' => $work_id
+]);
+$work_summary = $stmt->fetch() ?: [];
+$work_issue_count = (int)($work_summary['issue_count'] ?? 0);
+$work_magazine_count = (int)($work_summary['magazine_count'] ?? 0);
+$work_creator_count = (int)($work_summary['creator_count'] ?? 0);
+
 // 年一覧
 $years = [];
 foreach ($contents as $row) {
@@ -568,6 +586,21 @@ function format_episode_no($row, $work) {
         .count {
             margin-bottom: 16px;
             color: #666;
+        }
+
+        .page-description {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin: 16px 0 20px;
+            color: #444;
+            line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .page-description strong {
+            color: #222;
         }
 
         .filter-box {
@@ -843,6 +876,14 @@ require_once __DIR__ . '/includes/header.php';
 
     <div class="count">
         掲載件数：<?= h(count($contents)) ?>件
+    </div>
+
+    <div class="page-description">
+        <?php if ($work_total_content_count > 0): ?>
+            このページでは、作品<strong>『<?= h($work['title']) ?>』</strong>の掲載情報を掲載しています。登録済みの<?= h($work_total_content_count) ?>件の掲載データから、掲載された雑誌号<?= h($work_issue_count) ?>件、掲載雑誌<?= h($work_magazine_count) ?>誌、作者・関係者<?= h($work_creator_count) ?>人、掲載順、開始ページなどを確認できます。
+        <?php else: ?>
+            この作品の掲載情報はまだ登録されていません。データは順次追加・整理しています。
+        <?php endif; ?>
     </div>
 
     <?php if (!empty($mediamix_rows)): ?>

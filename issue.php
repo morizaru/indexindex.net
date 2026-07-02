@@ -477,6 +477,7 @@ $should_noindex = ($content_count === 0);
 
 $issue_summary = [
     'content_count' => $content_count,
+    'work_ids' => [],
     'creator_ids' => [],
     'badges' => [
         '読切' => 0,
@@ -487,6 +488,11 @@ $issue_summary = [
 ];
 
 foreach ($contents as $content_row) {
+    $work_id = isset($content_row['work_id']) ? (int)$content_row['work_id'] : 0;
+    if ($work_id > 0) {
+        $issue_summary['work_ids'][$work_id] = true;
+    }
+
     foreach (get_content_badges($content_row) as $badge) {
         $label = $badge['label'] ?? '';
         if (isset($issue_summary['badges'][$label])) {
@@ -505,6 +511,7 @@ foreach ($contents as $content_row) {
     }
 }
 
+$issue_summary['work_count'] = count($issue_summary['work_ids']);
 $issue_summary['creator_count'] = count($issue_summary['creator_ids']);
 
 $issue_label_special = trim((string)($issue['issue_label_special'] ?? ''));
@@ -615,6 +622,7 @@ $issue_description_date = format_issue_description_date($issue);
             line-height: 1.8;
         }
 
+        .page-description,
         .description-box {
             margin: 0 0 20px;
             padding: 14px 16px;
@@ -623,6 +631,11 @@ $issue_description_date = format_issue_description_date($issue);
             border-radius: 8px;
             color: #444;
             line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .page-description strong {
+            color: #222;
         }
 
         .issue-summary {
@@ -870,8 +883,12 @@ require_once __DIR__ . '/includes/header.php';
         巻（号）通巻：<?= h(format_issue_volume_text($issue)) ?>
     </div>
 
-    <div class="description-box">
-        このページでは、<?= h($issue_description_name) ?>の目次情報、掲載作品、作者、掲載順、開始ページを確認できます。<?= $issue_description_date !== '' ? h($issue_description_date) . '。' : '' ?>
+    <div class="page-description">
+        <?php if ($content_count > 0): ?>
+            このページでは、<strong><?= h($issue_description_name) ?></strong>の目次情報を掲載しています。登録されている<?= h($content_count) ?>件の目次から、掲載作品<?= h($issue_summary['work_count']) ?>件、作者・関係者<?= h($issue_summary['creator_count']) ?>人、掲載順、開始ページを確認できます。<?= $issue_description_date !== '' ? h($issue_description_date) . '。' : '' ?>
+        <?php else: ?>
+            この雑誌号にはまだ目次が登録されていません。データは順次追加・整理しています。
+        <?php endif; ?>
     </div>
 
     <section class="issue-summary" aria-label="この雑誌号の収録内容概要">
