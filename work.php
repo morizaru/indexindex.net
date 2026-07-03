@@ -770,6 +770,14 @@ function format_episode_no($row, $work) {
             font-size: 13px;
         }
 
+        .note-row .note-cell {
+            background: #fafafa;
+        }
+
+        .note-row .note-cell::before {
+            content: none;
+        }
+
         .empty {
             color: #666;
         }
@@ -816,10 +824,16 @@ function format_episode_no($row, $work) {
                 display: none;
             }
 
-            tr {
+            tbody.work-item {
                 border: 1px solid #ddd;
                 margin-bottom: 12px;
                 padding: 8px;
+            }
+
+            tr {
+                border: none;
+                margin: 0;
+                padding: 0;
             }
 
             td {
@@ -841,6 +855,10 @@ function format_episode_no($row, $work) {
             td.episode-title::before { content: "話タイトル"; }
             td.creators::before { content: "人物"; }
             td.note-cell::before { content: "備考"; }
+
+            .note-row .note-cell::before {
+                content: "備考";
+            }
         }
     </style>
 
@@ -966,17 +984,16 @@ require_once __DIR__ . '/includes/header.php';
                     <th class="episode">話数</th>
                     <th></th>
                     <th>人物</th>
-                    <th>備考</th>
                 </tr>
             </thead>
-            <tbody>
             <?php foreach ($contents as $row): ?>
                 <?php
                     $episode_display = format_episode_no($row, $work);
                     $note_display = build_note_text($row);
                 ?>
-                <tr data-year="<?= h($row['issue_year']) ?>">
-                    <td class="issue">
+            <tbody class="work-item" data-year="<?= h($row['issue_year']) ?>">
+                <tr>
+                    <td class="issue" rowspan="2">
                         <a href="issue.php?id=<?= h($row['issue_id']) ?>">
                             <?= h($row['magazine_name']) ?><br>
                             <?= h($row['issue_label']) ?>
@@ -1006,15 +1023,17 @@ require_once __DIR__ . '/includes/header.php';
                     <td class="episode-title"><?= h($row['episode_title'] ?? '') ?></td>
 
                     <td class="creators"><?= render_creator_links($row['creators_data'] ?? '') ?></td>
+                </tr>
 
-                    <td class="note-cell">
+                <tr class="note-row">
+                    <td class="note-cell" colspan="5">
                         <?php if ($note_display !== ''): ?>
                             <span class="note"><?= h($note_display) ?></span>
                         <?php endif; ?>
                     </td>
                 </tr>
-            <?php endforeach; ?>
             </tbody>
+            <?php endforeach; ?>
         </table>
 
     <?php else: ?>
@@ -1039,16 +1058,16 @@ function applyFilters() {
 
     const year = yearFilter ? yearFilter.value : '';
     const keyword = textFilter ? textFilter.value.trim().toLowerCase() : '';
-    const rows = table.querySelectorAll('tbody tr');
+    const items = table.querySelectorAll('tbody.work-item');
 
-    rows.forEach(row => {
-        const rowYear = row.dataset.year || '';
-        const text = row.textContent.toLowerCase();
+    items.forEach(item => {
+        const itemYear = item.dataset.year || '';
+        const text = item.textContent.toLowerCase();
 
-        const matchYear = !year || rowYear === year;
+        const matchYear = !year || itemYear === year;
         const matchText = !keyword || text.includes(keyword);
 
-        row.style.display = (matchYear && matchText) ? '' : 'none';
+        item.style.display = (matchYear && matchText) ? '' : 'none';
     });
 }
 

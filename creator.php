@@ -597,6 +597,14 @@ $sort_labels = [
             font-size: 13px;
         }
 
+        .note-row .note-cell {
+            background: #fafafa;
+        }
+
+        .note-row .note-cell::before {
+            content: none;
+        }
+
         .small {
             color: #666;
             font-size: 13px;
@@ -713,10 +721,16 @@ $sort_labels = [
                 display: none;
             }
 
-            tr {
+            tbody.creator-item {
                 border: 1px solid #ddd;
                 margin-bottom: 12px;
                 padding: 8px;
+            }
+
+            tr {
+                border: none;
+                margin: 0;
+                padding: 0;
             }
 
             td {
@@ -737,6 +751,10 @@ $sort_labels = [
             td.episode::before { content: "話数"; }
             td.episode-title::before { content: "話タイトル"; }
             td.note-cell::before { content: "備考"; }
+
+            .note-row .note-cell::before {
+                content: "備考";
+            }
 
             .top-button {
                 right: 14px;
@@ -897,13 +915,12 @@ require_once __DIR__ . '/includes/header.php';
                     </th>
                     <th class="episode">話数</th>
                     <th>話タイトル</th>
-                    <th>備考</th>
                 </tr>
             </thead>
-            <tbody>
             <?php foreach ($contents as $row): ?>
+            <tbody class="creator-item">
                 <tr>
-                    <td class="issue">
+                    <td class="issue" rowspan="2">
                         <a href="issue.php?id=<?= h($row['issue_id']) ?>">
                             <?= h($row['magazine_name']) ?><br>
                             <?= h($row['issue_label']) ?>
@@ -941,15 +958,17 @@ require_once __DIR__ . '/includes/header.php';
                     <td class="episode"><?= h($row['episode_no'] ?? '') ?></td>
 
                     <td class="episode-title"><?= h($row['episode_title'] ?? '') ?></td>
+                </tr>
 
-                    <td class="note-cell">
+                <tr class="note-row">
+                    <td class="note-cell" colspan="4">
                         <?php if (!empty($row['note'])): ?>
                             <span class="note"><?= h($row['note']) ?></span>
                         <?php endif; ?>
                     </td>
                 </tr>
-            <?php endforeach; ?>
             </tbody>
+            <?php endforeach; ?>
         </table>
 
     <?php endif; ?>
