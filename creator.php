@@ -12,10 +12,14 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
-function build_page_url($page, $creator_id, $sort, $dir, $keyword) {
+function build_page_url($page, $creator_id, $sort, $dir, $keyword, $view = 'issues') {
     $query = [
         'creator_id' => $creator_id,
     ];
+
+    if ($view !== 'issues') {
+        $query['view'] = $view;
+    }
 
     if ($keyword !== '') {
         $query['keyword'] = $keyword;
@@ -37,14 +41,14 @@ function build_page_url($page, $creator_id, $sort, $dir, $keyword) {
     return 'creator.php?' . $query_string;
 }
 
-function build_sort_url($sort_key, $current_sort, $current_dir, $creator_id, $keyword) {
+function build_sort_url($sort_key, $current_sort, $current_dir, $creator_id, $keyword, $view = 'issues') {
     $next_dir = 'asc';
 
     if ($current_sort === $sort_key && $current_dir === 'asc') {
         $next_dir = 'desc';
     }
 
-    return build_page_url(1, $creator_id, $sort_key, $next_dir, $keyword);
+    return build_page_url(1, $creator_id, $sort_key, $next_dir, $keyword, $view);
 }
 
 function sort_mark($sort_key, $current_sort, $current_dir) {
@@ -57,6 +61,10 @@ function sort_mark($sort_key, $current_sort, $current_dir) {
 
 $creator_id = isset($_GET['creator_id']) ? (int)$_GET['creator_id'] : 0;
 $keyword = isset($_GET['keyword']) ? trim((string)$_GET['keyword']) : '';
+$view = isset($_GET['view']) ? (string)$_GET['view'] : 'issues';
+if (!in_array($view, ['issues', 'works'], true)) {
+    $view = 'issues';
+}
 
 if ($creator_id <= 0) {
     exit('人物IDが指定されていません。');
@@ -78,72 +86,80 @@ if (!in_array($dir, ['asc', 'desc'], true)) {
 
 $dir_sql = strtoupper($dir);
 
-$issue_label_date_order_asc = "
+$issue_order_asc = "
+    m.name ASC,
     CASE
-        WHEN mi.issue_label REGEXP '[0-9][0-9][0-9][0-9]年' THEN 0
-        ELSE 1
+        WHEN mi.publication_date IS NOT NULL
+             AND mi.publication_date <> ''
+             AND mi.publication_date <> '0000-00-00'
+        THEN mi.publication_date
+        WHEN mi.release_date IS NOT NULL
+             AND mi.release_date <> ''
+             AND mi.release_date <> '0000-00-00'
+        THEN mi.release_date
+        ELSE '9999-12-31'
     END ASC,
+    COALESCE(mi.issue_year, mi.publication_year, 9999) ASC,
     CASE
-        WHEN mi.issue_label REGEXP '[0-9][0-9][0-9][0-9]年'
-        THEN CAST(RIGHT(SUBSTRING_INDEX(mi.issue_label, '年', 1), 4) AS UNSIGNED)
-        ELSE 9999
+        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
+        ELSE 999999
     END ASC,
-    CASE
-        WHEN mi.issue_label LIKE '%年%月%'
-        THEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(mi.issue_label, '年', -1), '月', 1) AS UNSIGNED)
-        ELSE 99
-    END ASC,
-    CASE
-        WHEN mi.issue_label LIKE '%月%日%'
-        THEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(mi.issue_label, '月', -1), '日', 1) AS UNSIGNED)
-        ELSE 0
-    END ASC,
-    mi.issue_label ASC,
     mi.id ASC
 ";
 
-$issue_label_date_order_desc = "
+$issue_order_desc = "
+    m.name ASC,
     CASE
-        WHEN mi.issue_label REGEXP '[0-9][0-9][0-9][0-9]年' THEN 0
-        ELSE 1
-    END ASC,
+        WHEN mi.publication_date IS NOT NULL
+             AND mi.publication_date <> ''
+             AND mi.publication_date <> '0000-00-00'
+        THEN mi.publication_date
+        WHEN mi.release_date IS NOT NULL
+             AND mi.release_date <> ''
+             AND mi.release_date <> '0000-00-00'
+        THEN mi.release_date
+        ELSE '0000-01-01'
+    END DESC,
+    COALESCE(mi.issue_year, mi.publication_year, 0) DESC,
     CASE
-        WHEN mi.issue_label REGEXP '[0-9][0-9][0-9][0-9]年'
-        THEN CAST(RIGHT(SUBSTRING_INDEX(mi.issue_label, '年', 1), 4) AS UNSIGNED)
+        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
         ELSE 0
     END DESC,
-    CASE
-        WHEN mi.issue_label LIKE '%年%月%'
-        THEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(mi.issue_label, '年', -1), '月', 1) AS UNSIGNED)
-        ELSE 0
-    END DESC,
-    CASE
-        WHEN mi.issue_label LIKE '%月%日%'
-        THEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(mi.issue_label, '月', -1), '日', 1) AS UNSIGNED)
-        ELSE 0
-    END DESC,
-    mi.issue_label DESC,
     mi.id DESC
 ";
 
-$issue_label_date_order = ($dir === 'desc') ? $issue_label_date_order_desc : $issue_label_date_order_asc;
+$issue_order = ($dir === 'desc') ? $issue_order_desc : $issue_order_asc;
 
 $order_by_map = [
     'issue' => "
-        {$issue_label_date_order},
-        m.name ASC,
+        {$issue_order},
         ic.sort_order ASC,
         ic.id ASC
     ",
     'title' => "
         ic.title_main {$dir_sql},
-        {$issue_label_date_order_asc},
-        m.name ASC,
+        {$issue_order_asc},
         ic.sort_order ASC,
         ic.id ASC
     ",
 ];
 $order_by_sql = $order_by_map[$sort];
+
+$work_order_by_map = [
+    'issue' => "
+        MIN(mi.issue_year) {$dir_sql},
+        MIN(mi.id) {$dir_sql},
+        w.title ASC,
+        w.id ASC
+    ",
+    'title' => "
+        w.title {$dir_sql},
+        MIN(mi.issue_year) ASC,
+        MIN(mi.id) ASC,
+        w.id ASC
+    ",
+];
+$work_order_by_sql = $work_order_by_map[$sort];
 
 // 人物情報
 $stmt = $pdo->prepare("
@@ -230,18 +246,32 @@ $creator_work_count = (int)($creator_summary['work_count'] ?? 0);
 $creator_issue_count = (int)($creator_summary['issue_count'] ?? 0);
 $creator_roles = trim((string)($creator_summary['roles'] ?? ''));
 
-// 総目次件数
-$count_sql = "
-    SELECT COUNT(DISTINCT ic.id) AS total_count
-    FROM content_creators cc
-    JOIN issue_contents ic ON cc.content_id = ic.id
-    LEFT JOIN works w ON ic.work_id = w.id
-    JOIN magazine_issues mi ON ic.issue_id = mi.id
-    JOIN magazines m ON mi.magazine_id = m.id
-    JOIN creators c ON cc.creator_id = c.id
-    WHERE cc.creator_id = :creator_id
-      {$keyword_where_sql}
-";
+// 総件数
+if ($view === 'works') {
+    $count_sql = "
+        SELECT COUNT(DISTINCT w.id) AS total_count
+        FROM content_creators cc
+        JOIN issue_contents ic ON cc.content_id = ic.id
+        JOIN works w ON ic.work_id = w.id
+        JOIN magazine_issues mi ON ic.issue_id = mi.id
+        JOIN magazines m ON mi.magazine_id = m.id
+        JOIN creators c ON cc.creator_id = c.id
+        WHERE cc.creator_id = :creator_id
+          {$keyword_where_sql}
+    ";
+} else {
+    $count_sql = "
+        SELECT COUNT(DISTINCT ic.id) AS total_count
+        FROM content_creators cc
+        JOIN issue_contents ic ON cc.content_id = ic.id
+        LEFT JOIN works w ON ic.work_id = w.id
+        JOIN magazine_issues mi ON ic.issue_id = mi.id
+        JOIN magazines m ON mi.magazine_id = m.id
+        JOIN creators c ON cc.creator_id = c.id
+        WHERE cc.creator_id = :creator_id
+          {$keyword_where_sql}
+    ";
+}
 
 $stmt = $pdo->prepare($count_sql);
 $stmt->execute(array_merge([
@@ -256,8 +286,53 @@ if ($page > $total_pages) {
 
 $offset = ($page - 1) * $per_page;
 
-// 作品一覧：1ページ分だけ取得
-$sql = "
+$contents = [];
+$works = [];
+
+if ($view === 'works') {
+    // 作品別一覧：1ページ分だけ取得
+    $sql = "
+        SELECT
+            w.id,
+            w.title,
+            w.title_sub,
+            w.publication_type,
+            COUNT(DISTINCT ic.id) AS content_count,
+            COUNT(DISTINCT ic.issue_id) AS issue_count,
+            MIN(mi.issue_year) AS first_year,
+            MAX(mi.issue_year) AS last_year,
+            GROUP_CONCAT(DISTINCT m.name ORDER BY m.name SEPARATOR ' / ') AS magazine_names,
+            GROUP_CONCAT(
+                DISTINCT
+                CASE
+                    WHEN cc.role IS NOT NULL
+                         AND cc.role <> ''
+                         AND cc.role <> 'author'
+                    THEN cc.role
+                    ELSE NULL
+                END
+                ORDER BY cc.role
+                SEPARATOR ' / '
+            ) AS roles
+        FROM content_creators cc
+        JOIN issue_contents ic ON cc.content_id = ic.id
+        JOIN works w ON ic.work_id = w.id
+        JOIN magazine_issues mi ON ic.issue_id = mi.id
+        JOIN magazines m ON mi.magazine_id = m.id
+        JOIN creators c ON cc.creator_id = c.id
+        WHERE cc.creator_id = :creator_id
+          {$keyword_where_sql}
+        GROUP BY
+            w.id,
+            w.title,
+            w.title_sub,
+            w.publication_type
+        ORDER BY {$work_order_by_sql}
+        LIMIT :limit OFFSET :offset
+    ";
+} else {
+    // 掲載一覧：1ページ分だけ取得
+    $sql = "
     SELECT
         ic.id AS content_id,
         ic.issue_id,
@@ -275,6 +350,9 @@ $sql = "
         mi.issue_label,
         mi.issue_year,
         mi.issue_no,
+        mi.publication_date,
+        mi.publication_year,
+        mi.release_date,
 
         m.name AS magazine_name,
         p.name AS publisher_name,
@@ -315,11 +393,15 @@ $sql = "
         mi.issue_label,
         mi.issue_year,
         mi.issue_no,
+        mi.publication_date,
+        mi.publication_year,
+        mi.release_date,
         m.name,
         p.name
     ORDER BY {$order_by_sql}
     LIMIT :limit OFFSET :offset
 ";
+}
 
 $stmt = $pdo->prepare($sql);
 $stmt->bindValue(':creator_id', $creator_id, PDO::PARAM_INT);
@@ -329,7 +411,11 @@ foreach ($keyword_params as $param_name => $param_value) {
 $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
-$contents = $stmt->fetchAll();
+if ($view === 'works') {
+    $works = $stmt->fetchAll();
+} else {
+    $contents = $stmt->fetchAll();
+}
 
 $from_count = $total_count > 0 ? $offset + 1 : 0;
 $to_count = min($offset + $per_page, $total_count);
@@ -338,6 +424,7 @@ $sort_labels = [
     'issue' => '雑誌・号',
     'title' => 'タイトル',
 ];
+$current_sort_label = ($view === 'works' && $sort === 'issue') ? '収録年' : ($sort_labels[$sort] ?? '雑誌・号');
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -412,6 +499,31 @@ $sort_labels = [
             margin-bottom: 16px;
             color: #666;
             line-height: 1.7;
+        }
+
+        .tab-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 0 0 16px;
+        }
+
+        .tab-nav a {
+            display: inline-block;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fff;
+            color: #0066cc;
+            font-weight: bold;
+            line-height: 1;
+            text-decoration: none;
+        }
+
+        .tab-nav a.active {
+            background: #333;
+            border-color: #333;
+            color: #fff;
         }
 
         .page-description {
@@ -592,6 +704,17 @@ $sort_labels = [
             width: 100px;
         }
 
+        .num {
+            width: 90px;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .year {
+            width: 130px;
+            white-space: nowrap;
+        }
+
         .note {
             color: #b00020;
             font-size: 13px;
@@ -737,6 +860,9 @@ $sort_labels = [
             td.episode::before { content: "話数"; }
             td.episode-title::before { content: "話タイトル"; }
             td.note-cell::before { content: "備考"; }
+            td.work-title::before { content: "作品名"; }
+            td.num::before { content: "件数"; }
+            td.year::before { content: "収録年"; }
 
             .top-button {
                 right: 14px;
@@ -788,9 +914,15 @@ require_once __DIR__ . '/includes/header.php';
 
     <section class="creator-list-block" aria-label="掲載リスト">
 
+    <div class="tab-nav" aria-label="表示切替">
+        <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword, 'issues')) ?>" class="<?= $view === 'issues' ? 'active' : '' ?>">掲載一覧</a>
+        <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword, 'works')) ?>" class="<?= $view === 'works' ? 'active' : '' ?>">作品別</a>
+    </div>
+
     <div class="condition-box">
+        表示：<?= h($view === 'works' ? '作品別' : '掲載一覧') ?> /
         キーワード：<?= h($keyword !== '' ? $keyword : '指定なし') ?> /
-        並び順：<?= h($sort_labels[$sort] ?? '雑誌・号') ?><?= h($dir === 'asc' ? ' 昇順' : ' 降順') ?>
+        並び順：<?= h($current_sort_label) ?><?= h($dir === 'asc' ? ' 昇順' : ' 降順') ?>
     </div>
 
     <div class="count">
@@ -801,8 +933,8 @@ require_once __DIR__ . '/includes/header.php';
     <?php if ($total_pages > 1): ?>
         <div class="pagination" aria-label="ページ移動">
             <?php if ($page > 1): ?>
-                <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword)) ?>">最初</a>
-                <a href="<?= h(build_page_url($page - 1, $creator_id, $sort, $dir, $keyword)) ?>">前へ</a>
+                <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword, $view)) ?>">最初</a>
+                <a href="<?= h(build_page_url($page - 1, $creator_id, $sort, $dir, $keyword, $view)) ?>">前へ</a>
             <?php else: ?>
                 <span class="disabled">最初</span>
                 <span class="disabled">前へ</span>
@@ -814,7 +946,7 @@ require_once __DIR__ . '/includes/header.php';
             ?>
 
             <?php if ($start_page > 1): ?>
-                <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword)) ?>">1</a>
+                <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword, $view)) ?>">1</a>
                 <?php if ($start_page > 2): ?>
                     <span class="dots">…</span>
                 <?php endif; ?>
@@ -824,7 +956,7 @@ require_once __DIR__ . '/includes/header.php';
                 <?php if ($i === $page): ?>
                     <span class="current"><?= h($i) ?></span>
                 <?php else: ?>
-                    <a href="<?= h(build_page_url($i, $creator_id, $sort, $dir, $keyword)) ?>"><?= h($i) ?></a>
+                    <a href="<?= h(build_page_url($i, $creator_id, $sort, $dir, $keyword, $view)) ?>"><?= h($i) ?></a>
                 <?php endif; ?>
             <?php endfor; ?>
 
@@ -832,12 +964,12 @@ require_once __DIR__ . '/includes/header.php';
                 <?php if ($end_page < $total_pages - 1): ?>
                     <span class="dots">…</span>
                 <?php endif; ?>
-                <a href="<?= h(build_page_url($total_pages, $creator_id, $sort, $dir, $keyword)) ?>"><?= h($total_pages) ?></a>
+                <a href="<?= h(build_page_url($total_pages, $creator_id, $sort, $dir, $keyword, $view)) ?>"><?= h($total_pages) ?></a>
             <?php endif; ?>
 
             <?php if ($page < $total_pages): ?>
-                <a href="<?= h(build_page_url($page + 1, $creator_id, $sort, $dir, $keyword)) ?>">次へ</a>
-                <a href="<?= h(build_page_url($total_pages, $creator_id, $sort, $dir, $keyword)) ?>">最後</a>
+                <a href="<?= h(build_page_url($page + 1, $creator_id, $sort, $dir, $keyword, $view)) ?>">次へ</a>
+                <a href="<?= h(build_page_url($total_pages, $creator_id, $sort, $dir, $keyword, $view)) ?>">最後</a>
             <?php else: ?>
                 <span class="disabled">次へ</span>
                 <span class="disabled">最後</span>
@@ -845,6 +977,9 @@ require_once __DIR__ . '/includes/header.php';
 
             <form method="get" action="creator.php" class="page-jump">
                 <input type="hidden" name="creator_id" value="<?= h($creator_id) ?>">
+                <?php if ($view !== 'issues'): ?>
+                    <input type="hidden" name="view" value="<?= h($view) ?>">
+                <?php endif; ?>
                 <?php if ($keyword !== ''): ?>
                     <input type="hidden" name="keyword" value="<?= h($keyword) ?>">
                 <?php endif; ?>
@@ -862,6 +997,9 @@ require_once __DIR__ . '/includes/header.php';
 
     <form method="get" action="creator.php" class="filter-box">
         <input type="hidden" name="creator_id" value="<?= h($creator_id) ?>">
+        <?php if ($view !== 'issues'): ?>
+            <input type="hidden" name="view" value="<?= h($view) ?>">
+        <?php endif; ?>
         <?php if ($sort !== 'issue'): ?>
             <input type="hidden" name="sort" value="<?= h($sort) ?>">
         <?php endif; ?>
@@ -871,94 +1009,151 @@ require_once __DIR__ . '/includes/header.php';
         <input type="text" name="keyword" value="<?= h($keyword) ?>" placeholder="全データから雑誌名・号・タイトルで絞り込み">
         <button type="submit">絞り込み</button>
         <?php if ($keyword !== ''): ?>
-            <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, '')) ?>">解除</a>
+            <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, '', $view)) ?>">解除</a>
         <?php endif; ?>
     </form>
 
-    <?php if (empty($contents)): ?>
-
-        <p class="empty">この人物に関連する掲載情報はまだ登録されていません。データは順次追加・整理しています。</p>
-
-    <?php else: ?>
-
-        <table id="contentsTable">
-            <thead>
-                <tr>
-                    <th>
-                        <a class="sort-link" href="<?= h(build_sort_url('issue', $sort, $dir, $creator_id, $keyword)) ?>">
-                            雑誌・号<span class="sort-mark"><?= h(sort_mark('issue', $sort, $dir)) ?></span>
-                        </a>
-                    </th>
-                    <th class="page">ページ</th>
-                    <th>
-                        <a class="sort-link" href="<?= h(build_sort_url('title', $sort, $dir, $creator_id, $keyword)) ?>">
-                            タイトル<span class="sort-mark"><?= h(sort_mark('title', $sort, $dir)) ?></span>
-                        </a>
-                    </th>
-                    <th class="episode">話数</th>
-                    <th>話タイトル</th>
-                    <th>備考</th>
-                </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($contents as $row): ?>
-                <tr>
-                    <td class="issue">
-                        <a href="issue.php?id=<?= h($row['issue_id']) ?>">
-                            <?= h($row['magazine_name']) ?><br>
-                            <?= h($row['issue_label']) ?>
-                        </a>
-                        <div class="small">
-                            <?= h($row['publisher_name']) ?><br>
-                            <?php if (!empty($row['roles'])): ?>
-                                役割：<?= h($row['roles']) ?>
+    <?php if ($view === 'works'): ?>
+        <?php if (empty($works)): ?>
+            <p class="empty">この人物に関連する作品はまだ登録されていません。データは順次追加・整理しています。</p>
+        <?php else: ?>
+            <table id="worksTable">
+                <thead>
+                    <tr>
+                        <th>
+                            <a class="sort-link" href="<?= h(build_sort_url('title', $sort, $dir, $creator_id, $keyword, $view)) ?>">
+                                作品名<span class="sort-mark"><?= h(sort_mark('title', $sort, $dir)) ?></span>
+                            </a>
+                        </th>
+                        <th class="num">掲載件数</th>
+                        <th class="num">雑誌号数</th>
+                        <th class="year">
+                            <a class="sort-link" href="<?= h(build_sort_url('issue', $sort, $dir, $creator_id, $keyword, $view)) ?>">
+                                収録年<span class="sort-mark"><?= h(sort_mark('issue', $sort, $dir)) ?></span>
+                            </a>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($works as $row): ?>
+                    <tr>
+                        <td class="work-title">
+                            <a href="<?= h($keyword !== '' ? 'work.php?work_id=' . (int)$row['id'] . '&keyword=' . urlencode($keyword) : 'work.php?work_id=' . (int)$row['id']) ?>">
+                                <span class="title-main"><?= h($row['title']) ?></span>
+                            </a>
+                            <?php if (!empty($row['title_sub'])): ?>
+                                <div class="small"><?= h($row['title_sub']) ?></div>
                             <?php endif; ?>
-                        </div>
-                    </td>
-
-                    <td class="page">
-                        <?php if ($row['page_start'] !== null && $row['page_start'] !== '' && $row['page_end'] !== null && $row['page_end'] !== ''): ?>
-                            <?= h($row['page_start']) ?>〜<?= h($row['page_end']) ?>
-                        <?php elseif ($row['page_start'] !== null && $row['page_start'] !== ''): ?>
-                            <?= h($row['page_start']) ?>
-                        <?php else: ?>
-                            -
-                        <?php endif; ?>
-                    </td>
-
-                    <td class="title">
-                        <span class="title-main">
-                            <?php if (!empty($row['work_id'])): ?>
-                                <a href="work.php?work_id=<?= h($row['work_id']) ?>">
-                                    <?= h($row['title_main']) ?>
-                                </a>
+                            <div class="small">
+                                <?php if (!empty($row['publication_type'])): ?>
+                                    区分：<?= h($row['publication_type']) ?><br>
+                                <?php endif; ?>
+                                <?php if (!empty($row['magazine_names'])): ?>
+                                    雑誌：<?= h($row['magazine_names']) ?><br>
+                                <?php endif; ?>
+                                <?php if (!empty($row['roles'])): ?>
+                                    役割：<?= h($row['roles']) ?>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                        <td class="num"><?= h($row['content_count']) ?></td>
+                        <td class="num"><?= h($row['issue_count']) ?></td>
+                        <td class="year">
+                            <?php if ($row['first_year'] && $row['last_year']): ?>
+                                <?php if ($row['first_year'] == $row['last_year']): ?>
+                                    <?= h($row['first_year']) ?>年
+                                <?php else: ?>
+                                    <?= h($row['first_year']) ?>年〜<?= h($row['last_year']) ?>年
+                                <?php endif; ?>
                             <?php else: ?>
-                                <?= h($row['title_main']) ?>
+                                -
                             <?php endif; ?>
-                        </span>
-                    </td>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    <?php else: ?>
+        <?php if (empty($contents)): ?>
+            <p class="empty">この人物に関連する掲載情報はまだ登録されていません。データは順次追加・整理しています。</p>
+        <?php else: ?>
+            <table id="contentsTable">
+                <thead>
+                    <tr>
+                        <th>
+                            <a class="sort-link" href="<?= h(build_sort_url('issue', $sort, $dir, $creator_id, $keyword, $view)) ?>">
+                                雑誌・号<span class="sort-mark"><?= h(sort_mark('issue', $sort, $dir)) ?></span>
+                            </a>
+                        </th>
+                        <th class="page">ページ</th>
+                        <th>
+                            <a class="sort-link" href="<?= h(build_sort_url('title', $sort, $dir, $creator_id, $keyword, $view)) ?>">
+                                タイトル<span class="sort-mark"><?= h(sort_mark('title', $sort, $dir)) ?></span>
+                            </a>
+                        </th>
+                        <th class="episode">話数</th>
+                        <th>話タイトル</th>
+                        <th>備考</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($contents as $row): ?>
+                    <tr>
+                        <td class="issue">
+                            <a href="issue.php?id=<?= h($row['issue_id']) ?>">
+                                <?= h($row['magazine_name']) ?><br>
+                                <?= h($row['issue_label']) ?>
+                            </a>
+                            <div class="small">
+                                <?= h($row['publisher_name']) ?><br>
+                                <?php if (!empty($row['roles'])): ?>
+                                    役割：<?= h($row['roles']) ?>
+                                <?php endif; ?>
+                            </div>
+                        </td>
 
-                    <td class="episode"><?= h($row['episode_no'] ?? '') ?></td>
+                        <td class="page">
+                            <?php if ($row['page_start'] !== null && $row['page_start'] !== '' && $row['page_end'] !== null && $row['page_end'] !== ''): ?>
+                                <?= h($row['page_start']) ?>〜<?= h($row['page_end']) ?>
+                            <?php elseif ($row['page_start'] !== null && $row['page_start'] !== ''): ?>
+                                <?= h($row['page_start']) ?>
+                            <?php else: ?>
+                                -
+                            <?php endif; ?>
+                        </td>
 
-                    <td class="episode-title"><?= h($row['episode_title'] ?? '') ?></td>
+                        <td class="title">
+                            <span class="title-main">
+                                <?php if (!empty($row['work_id'])): ?>
+                                    <a href="work.php?work_id=<?= h($row['work_id']) ?>">
+                                        <?= h($row['title_main']) ?>
+                                    </a>
+                                <?php else: ?>
+                                    <?= h($row['title_main']) ?>
+                                <?php endif; ?>
+                            </span>
+                        </td>
 
-                    <td class="note-cell">
-                        <?php if (!empty($row['note'])): ?>
-                            <span class="note"><?= h($row['note']) ?></span>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-
+                        <td class="episode"><?= h($row['episode_no'] ?? '') ?></td>
+                        <td class="episode-title"><?= h($row['episode_title'] ?? '') ?></td>
+                        <td class="note-cell">
+                            <?php if (!empty($row['note'])): ?>
+                                <span class="note"><?= h($row['note']) ?></span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
     <?php endif; ?>
 
     <?php if ($total_pages > 1): ?>
         <div class="pagination" aria-label="ページ移動">
             <?php if ($page > 1): ?>
-                <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword)) ?>">最初</a>
-                <a href="<?= h(build_page_url($page - 1, $creator_id, $sort, $dir, $keyword)) ?>">前へ</a>
+                <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword, $view)) ?>">最初</a>
+                <a href="<?= h(build_page_url($page - 1, $creator_id, $sort, $dir, $keyword, $view)) ?>">前へ</a>
             <?php else: ?>
                 <span class="disabled">最初</span>
                 <span class="disabled">前へ</span>
@@ -970,7 +1165,7 @@ require_once __DIR__ . '/includes/header.php';
             ?>
 
             <?php if ($start_page > 1): ?>
-                <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword)) ?>">1</a>
+                <a href="<?= h(build_page_url(1, $creator_id, $sort, $dir, $keyword, $view)) ?>">1</a>
                 <?php if ($start_page > 2): ?>
                     <span class="dots">…</span>
                 <?php endif; ?>
@@ -980,7 +1175,7 @@ require_once __DIR__ . '/includes/header.php';
                 <?php if ($i === $page): ?>
                     <span class="current"><?= h($i) ?></span>
                 <?php else: ?>
-                    <a href="<?= h(build_page_url($i, $creator_id, $sort, $dir, $keyword)) ?>"><?= h($i) ?></a>
+                    <a href="<?= h(build_page_url($i, $creator_id, $sort, $dir, $keyword, $view)) ?>"><?= h($i) ?></a>
                 <?php endif; ?>
             <?php endfor; ?>
 
@@ -988,12 +1183,12 @@ require_once __DIR__ . '/includes/header.php';
                 <?php if ($end_page < $total_pages - 1): ?>
                     <span class="dots">…</span>
                 <?php endif; ?>
-                <a href="<?= h(build_page_url($total_pages, $creator_id, $sort, $dir, $keyword)) ?>"><?= h($total_pages) ?></a>
+                <a href="<?= h(build_page_url($total_pages, $creator_id, $sort, $dir, $keyword, $view)) ?>"><?= h($total_pages) ?></a>
             <?php endif; ?>
 
             <?php if ($page < $total_pages): ?>
-                <a href="<?= h(build_page_url($page + 1, $creator_id, $sort, $dir, $keyword)) ?>">次へ</a>
-                <a href="<?= h(build_page_url($total_pages, $creator_id, $sort, $dir, $keyword)) ?>">最後</a>
+                <a href="<?= h(build_page_url($page + 1, $creator_id, $sort, $dir, $keyword, $view)) ?>">次へ</a>
+                <a href="<?= h(build_page_url($total_pages, $creator_id, $sort, $dir, $keyword, $view)) ?>">最後</a>
             <?php else: ?>
                 <span class="disabled">次へ</span>
                 <span class="disabled">最後</span>
@@ -1001,6 +1196,9 @@ require_once __DIR__ . '/includes/header.php';
 
             <form method="get" action="creator.php" class="page-jump">
                 <input type="hidden" name="creator_id" value="<?= h($creator_id) ?>">
+                <?php if ($view !== 'issues'): ?>
+                    <input type="hidden" name="view" value="<?= h($view) ?>">
+                <?php endif; ?>
                 <?php if ($keyword !== ''): ?>
                     <input type="hidden" name="keyword" value="<?= h($keyword) ?>">
                 <?php endif; ?>
