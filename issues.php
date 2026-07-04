@@ -642,43 +642,30 @@ if ($magazine_id > 0) {
           {$issue_keyword_where_sql}
         GROUP BY mi.id
         ORDER BY
+            {$publication_year_sql} ASC,
             CASE
                 WHEN mi.publication_date IS NOT NULL
                      AND mi.publication_date <> ''
                      AND mi.publication_date <> '0000-00-00'
                 THEN mi.publication_date
-                WHEN TRIM(mi.issue_label) REGEXP '^[0-9]{4}年[0-9]{1,2}月[0-9]{1,2}日'
-                THEN STR_TO_DATE(
-                    REPLACE(
-                        REPLACE(
-                            REPLACE(
-                                SUBSTRING_INDEX(
-                                    SUBSTRING_INDEX(
-                                        TRIM(mi.issue_label),
-                                        '号',
-                                        1
-                                    ),
-                                    '増刊',
-                                    1
-                                ),
-                                '年',
-                                '-'
-                            ),
-                            '月',
-                            '-'
-                        ),
-                        '日',
-                        ''
-                    ),
-                    '%Y-%c-%e'
-                )
+                ELSE '9999-12-31'
+            END ASC,
+            CASE
                 WHEN mi.release_date IS NOT NULL
                      AND mi.release_date <> ''
                      AND mi.release_date <> '0000-00-00'
                 THEN mi.release_date
                 ELSE '9999-12-31'
-            END DESC,
-            mi.id DESC
+            END ASC,
+            CASE
+                WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
+                WHEN TRIM(mi.issue_label) REGEXP '^[0-9]{4}年[0-9]+'
+                THEN CAST(SUBSTRING_INDEX(TRIM(SUBSTRING_INDEX(mi.issue_label, '年', -1)), '月', 1) AS UNSIGNED)
+                WHEN TRIM(mi.issue_label) REGEXP '^[0-9]+'
+                THEN CAST(TRIM(mi.issue_label) AS UNSIGNED)
+                ELSE 999999
+            END ASC,
+            mi.id ASC
         LIMIT :limit OFFSET :offset
     ");
     $stmt->bindValue(':magazine_id', $magazine_id, PDO::PARAM_INT);
