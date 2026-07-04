@@ -64,7 +64,7 @@ function get_param(string $key): string
     return trim((string)($_GET[$key] ?? ''));
 }
 
-function build_issue_page_url(int $page, string $q, int $publisher_id, int $magazine_id, string $publication_year, bool $content_count_zero): string
+function build_issue_page_url(int $page, string $q, int $publisher_id, int $magazine_id, string $publication_year, bool $content_count_zero, string $sort = 'default', string $dir = 'asc'): string
 {
     $query = [];
 
@@ -88,12 +88,40 @@ function build_issue_page_url(int $page, string $q, int $publisher_id, int $maga
         $query['content_count_zero'] = 1;
     }
 
+    if ($sort !== 'default') {
+        $query['sort'] = $sort;
+    }
+
+    if ($dir !== 'asc') {
+        $query['dir'] = $dir;
+    }
+
     if ($page > 1) {
         $query['page'] = $page;
     }
 
     $query_string = http_build_query($query);
     return 'issues.php' . ($query_string !== '' ? '?' . $query_string : '');
+}
+
+function build_issue_sort_url(string $sort_key, string $current_sort, string $current_dir, string $q, int $publisher_id, int $magazine_id, string $publication_year, bool $content_count_zero): string
+{
+    $next_dir = 'asc';
+
+    if ($current_sort === $sort_key && $current_dir === 'asc') {
+        $next_dir = 'desc';
+    }
+
+    return build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort_key, $next_dir);
+}
+
+function sort_mark(string $sort_key, string $current_sort, string $current_dir): string
+{
+    if ($current_sort !== $sort_key) {
+        return '';
+    }
+
+    return $current_dir === 'asc' ? ' ▲' : ' ▼';
 }
 
 function table_has_column(PDO $pdo, string $table, string $column): bool
@@ -146,6 +174,36 @@ if ($publication_year !== '' && !preg_match('/^[0-9]{4}$/', $publication_year)) 
 }
 
 $content_count_zero = (($_GET['content_count_zero'] ?? '') === '1');
+
+$allowed_sorts = [
+    'default',
+    'id',
+    'magazine',
+    'publisher',
+    'issue_label',
+    'issue_label_special',
+    'publication_year',
+    'issue_vol',
+    'issue_no',
+    'issue_full_vol',
+    'publication_date',
+    'release_date',
+    'status',
+    'content_count',
+];
+$sort = get_param('sort');
+if (!in_array($sort, $allowed_sorts, true)) {
+    $sort = 'default';
+}
+
+$dir = strtolower(get_param('dir'));
+if (!in_array($dir, ['asc', 'desc'], true)) {
+    $dir = 'asc';
+}
+if ($sort === 'default') {
+    $dir = 'asc';
+}
+$dir_sql = strtoupper($dir);
 
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $perPage = 100;
@@ -296,6 +354,39 @@ $issue_full_vol_select = table_has_column($pdo, 'magazine_issues', 'issue_full_v
     ? 'mi.issue_full_vol'
     : 'NULL AS issue_full_vol';
 
+$default_order_sql = "
+    m.name ASC,
+    COALESCE(mi.issue_year, mi.publication_year, YEAR(mi.release_date), 9999) ASC,
+    COALESCE(mi.release_date, mi.publication_date, '9999-12-31') ASC,
+    mi.id ASC
+";
+
+$issue_no_order_sql = "
+    CASE
+        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
+        ELSE 999999
+    END {$dir_sql},
+    mi.issue_no {$dir_sql}
+";
+
+$order_by_map = [
+    'default' => $default_order_sql,
+    'id' => "mi.id {$dir_sql}",
+    'magazine' => "m.name {$dir_sql}, {$default_order_sql}",
+    'publisher' => "p.name {$dir_sql}, m.name ASC, {$default_order_sql}",
+    'issue_label' => "mi.issue_label {$dir_sql}, {$default_order_sql}",
+    'issue_label_special' => "mi.issue_label_special {$dir_sql}, {$default_order_sql}",
+    'publication_year' => "{$filter_year_expr} {$dir_sql}, {$default_order_sql}",
+    'issue_vol' => "issue_vol {$dir_sql}, {$default_order_sql}",
+    'issue_no' => "{$issue_no_order_sql}, {$default_order_sql}",
+    'issue_full_vol' => "issue_full_vol {$dir_sql}, {$default_order_sql}",
+    'publication_date' => "mi.publication_date {$dir_sql}, {$default_order_sql}",
+    'release_date' => "mi.release_date {$dir_sql}, {$default_order_sql}",
+    'status' => "mi.status {$dir_sql}, {$default_order_sql}",
+    'content_count' => "content_count {$dir_sql}, {$default_order_sql}",
+];
+$order_by_sql = $order_by_map[$sort];
+
 $count_sql = "
     SELECT COUNT(*) AS total_count
     FROM magazine_issues mi
@@ -346,11 +437,7 @@ $sql = "
         ON p.id = m.publisher_id
     {$content_count_join}
     {$where_sql}
-    ORDER BY
-        m.name ASC,
-        COALESCE(mi.issue_year, mi.publication_year, YEAR(mi.release_date), 9999) ASC,
-        COALESCE(mi.release_date, mi.publication_date, '9999-12-31') ASC,
-        mi.id ASC
+    ORDER BY {$order_by_sql}
     LIMIT :limit OFFSET :offset
 ";
 
@@ -564,6 +651,23 @@ if ($delete_result === 'deleted') {
             white-space: nowrap;
         }
 
+        th a.sort-link {
+            color: #222;
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        th a.sort-link:hover {
+            color: #0066cc;
+            text-decoration: underline;
+        }
+
+        .sort-mark {
+            color: #0066cc;
+            font-size: 12px;
+            margin-left: 2px;
+        }
+
         tr:nth-child(even) {
             background: #fafafa;
         }
@@ -694,6 +798,13 @@ if ($delete_result === 'deleted') {
                 </label>
             </div>
 
+            <?php if ($sort !== 'default'): ?>
+                <input type="hidden" name="sort" value="<?= h($sort) ?>">
+            <?php endif; ?>
+            <?php if ($dir !== 'asc'): ?>
+                <input type="hidden" name="dir" value="<?= h($dir) ?>">
+            <?php endif; ?>
+
             <div>
                 <button type="submit">表示する</button>
             </div>
@@ -714,8 +825,8 @@ if ($delete_result === 'deleted') {
 <?php if ($total_pages > 1): ?>
     <div class="pagination" aria-label="ページ移動">
         <?php if ($page > 1): ?>
-            <a href="<?= h(build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">最初</a>
-            <a href="<?= h(build_issue_page_url($page - 1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">前へ</a>
+            <a href="<?= h(build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">最初</a>
+            <a href="<?= h(build_issue_page_url($page - 1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">前へ</a>
         <?php else: ?>
             <span class="disabled">最初</span>
             <span class="disabled">前へ</span>
@@ -727,7 +838,7 @@ if ($delete_result === 'deleted') {
         ?>
 
         <?php if ($start_page > 1): ?>
-            <a href="<?= h(build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">1</a>
+            <a href="<?= h(build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">1</a>
             <?php if ($start_page > 2): ?>
                 <span class="dots">…</span>
             <?php endif; ?>
@@ -737,7 +848,7 @@ if ($delete_result === 'deleted') {
             <?php if ($i === $page): ?>
                 <span class="current"><?= h($i) ?></span>
             <?php else: ?>
-                <a href="<?= h(build_issue_page_url($i, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>"><?= h($i) ?></a>
+                <a href="<?= h(build_issue_page_url($i, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>"><?= h($i) ?></a>
             <?php endif; ?>
         <?php endfor; ?>
 
@@ -745,12 +856,12 @@ if ($delete_result === 'deleted') {
             <?php if ($end_page < $total_pages - 1): ?>
                 <span class="dots">…</span>
             <?php endif; ?>
-            <a href="<?= h(build_issue_page_url($total_pages, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>"><?= h($total_pages) ?></a>
+            <a href="<?= h(build_issue_page_url($total_pages, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>"><?= h($total_pages) ?></a>
         <?php endif; ?>
 
         <?php if ($page < $total_pages): ?>
-            <a href="<?= h(build_issue_page_url($page + 1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">次へ</a>
-            <a href="<?= h(build_issue_page_url($total_pages, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">最後</a>
+            <a href="<?= h(build_issue_page_url($page + 1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">次へ</a>
+            <a href="<?= h(build_issue_page_url($total_pages, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">最後</a>
         <?php else: ?>
             <span class="disabled">次へ</span>
             <span class="disabled">最後</span>
@@ -772,6 +883,12 @@ if ($delete_result === 'deleted') {
             <?php if ($content_count_zero): ?>
                 <input type="hidden" name="content_count_zero" value="1">
             <?php endif; ?>
+            <?php if ($sort !== 'default'): ?>
+                <input type="hidden" name="sort" value="<?= h($sort) ?>">
+            <?php endif; ?>
+            <?php if ($dir !== 'asc'): ?>
+                <input type="hidden" name="dir" value="<?= h($dir) ?>">
+            <?php endif; ?>
             <input type="number" name="page" min="1" max="<?= h($total_pages) ?>" value="<?= h($page) ?>" aria-label="ページ番号">
             <button type="submit">移動</button>
         </form>
@@ -781,19 +898,19 @@ if ($delete_result === 'deleted') {
 <table>
     <thead>
         <tr>
-            <th>ID</th>
-            <th>雑誌名</th>
-            <th>出版社</th>
-            <th>号数表示</th>
-            <th>特別号数表示</th>
-            <th>発行年</th>
-            <th>巻数</th>
-            <th>号数</th>
-            <th>通巻</th>
-            <th>発行日</th>
-            <th>発売日</th>
-            <th>状態</th>
-            <th>目次件数</th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('id', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">ID<span class="sort-mark"><?= h(sort_mark('id', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('magazine', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">雑誌名<span class="sort-mark"><?= h(sort_mark('magazine', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('publisher', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">出版社<span class="sort-mark"><?= h(sort_mark('publisher', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('issue_label', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">号数表示<span class="sort-mark"><?= h(sort_mark('issue_label', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('issue_label_special', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">特別号数表示<span class="sort-mark"><?= h(sort_mark('issue_label_special', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('publication_year', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">発行年<span class="sort-mark"><?= h(sort_mark('publication_year', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('issue_vol', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">巻数<span class="sort-mark"><?= h(sort_mark('issue_vol', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('issue_no', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">号数<span class="sort-mark"><?= h(sort_mark('issue_no', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('issue_full_vol', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">通巻<span class="sort-mark"><?= h(sort_mark('issue_full_vol', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('publication_date', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">発行日<span class="sort-mark"><?= h(sort_mark('publication_date', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('release_date', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">発売日<span class="sort-mark"><?= h(sort_mark('release_date', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('status', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">状態<span class="sort-mark"><?= h(sort_mark('status', $sort, $dir)) ?></span></a></th>
+            <th><a class="sort-link" href="<?= h(build_issue_sort_url('content_count', $sort, $dir, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">目次件数<span class="sort-mark"><?= h(sort_mark('content_count', $sort, $dir)) ?></span></a></th>
             <th>操作</th>
         </tr>
     </thead>
@@ -840,8 +957,8 @@ if ($delete_result === 'deleted') {
 <?php if ($total_pages > 1): ?>
     <div class="pagination" aria-label="ページ移動">
         <?php if ($page > 1): ?>
-            <a href="<?= h(build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">最初</a>
-            <a href="<?= h(build_issue_page_url($page - 1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">前へ</a>
+            <a href="<?= h(build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">最初</a>
+            <a href="<?= h(build_issue_page_url($page - 1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">前へ</a>
         <?php else: ?>
             <span class="disabled">最初</span>
             <span class="disabled">前へ</span>
@@ -853,7 +970,7 @@ if ($delete_result === 'deleted') {
         ?>
 
         <?php if ($start_page > 1): ?>
-            <a href="<?= h(build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">1</a>
+            <a href="<?= h(build_issue_page_url(1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">1</a>
             <?php if ($start_page > 2): ?>
                 <span class="dots">…</span>
             <?php endif; ?>
@@ -863,7 +980,7 @@ if ($delete_result === 'deleted') {
             <?php if ($i === $page): ?>
                 <span class="current"><?= h($i) ?></span>
             <?php else: ?>
-                <a href="<?= h(build_issue_page_url($i, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>"><?= h($i) ?></a>
+                <a href="<?= h(build_issue_page_url($i, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>"><?= h($i) ?></a>
             <?php endif; ?>
         <?php endfor; ?>
 
@@ -871,12 +988,12 @@ if ($delete_result === 'deleted') {
             <?php if ($end_page < $total_pages - 1): ?>
                 <span class="dots">…</span>
             <?php endif; ?>
-            <a href="<?= h(build_issue_page_url($total_pages, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>"><?= h($total_pages) ?></a>
+            <a href="<?= h(build_issue_page_url($total_pages, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>"><?= h($total_pages) ?></a>
         <?php endif; ?>
 
         <?php if ($page < $total_pages): ?>
-            <a href="<?= h(build_issue_page_url($page + 1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">次へ</a>
-            <a href="<?= h(build_issue_page_url($total_pages, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero)) ?>">最後</a>
+            <a href="<?= h(build_issue_page_url($page + 1, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">次へ</a>
+            <a href="<?= h(build_issue_page_url($total_pages, $q, $publisher_id, $magazine_id, $publication_year, $content_count_zero, $sort, $dir)) ?>">最後</a>
         <?php else: ?>
             <span class="disabled">次へ</span>
             <span class="disabled">最後</span>
@@ -897,6 +1014,12 @@ if ($delete_result === 'deleted') {
             <?php endif; ?>
             <?php if ($content_count_zero): ?>
                 <input type="hidden" name="content_count_zero" value="1">
+            <?php endif; ?>
+            <?php if ($sort !== 'default'): ?>
+                <input type="hidden" name="sort" value="<?= h($sort) ?>">
+            <?php endif; ?>
+            <?php if ($dir !== 'asc'): ?>
+                <input type="hidden" name="dir" value="<?= h($dir) ?>">
             <?php endif; ?>
             <input type="number" name="page" min="1" max="<?= h($total_pages) ?>" value="<?= h($page) ?>" aria-label="ページ番号">
             <button type="submit">移動</button>
