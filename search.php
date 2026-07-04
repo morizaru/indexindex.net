@@ -71,6 +71,7 @@ if ($q !== '') {
                AND mi.status = 'approved'
             WHERE (
                 m.name LIKE :keyword
+                OR m.name_search LIKE :keyword_name_search
                 OR mi.issue_label LIKE :keyword_issue_label
                 OR mi.issue_label_special LIKE :keyword_issue_label_special
             )
@@ -79,6 +80,9 @@ if ($q !== '') {
                 m.name,
                 p.name
             ORDER BY
+                MIN(mi.issue_year) IS NULL ASC,
+                MIN(mi.issue_year) ASC,
+                MAX(mi.issue_year) ASC,
                 m.name ASC,
                 p.name ASC
             LIMIT {$limit}
@@ -87,6 +91,7 @@ if ($q !== '') {
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             ':keyword' => $keyword,
+            ':keyword_name_search' => $keyword,
             ':keyword_issue_label' => $keyword,
             ':keyword_issue_label_special' => $keyword,
         ]);
