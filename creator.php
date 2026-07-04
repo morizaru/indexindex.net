@@ -88,18 +88,21 @@ $dir_sql = strtoupper($dir);
 
 $issue_order_asc = "
     m.name ASC,
+    COALESCE(mi.issue_year, mi.publication_year, 9999) ASC,
     CASE
         WHEN mi.publication_date IS NOT NULL
              AND mi.publication_date <> ''
              AND mi.publication_date <> '0000-00-00'
         THEN mi.publication_date
+        ELSE '9999-12-31'
+    END ASC,
+    CASE
         WHEN mi.release_date IS NOT NULL
              AND mi.release_date <> ''
              AND mi.release_date <> '0000-00-00'
         THEN mi.release_date
         ELSE '9999-12-31'
     END ASC,
-    COALESCE(mi.issue_year, mi.publication_year, 9999) ASC,
     CASE
         WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
         ELSE 999999
@@ -109,18 +112,21 @@ $issue_order_asc = "
 
 $issue_order_desc = "
     m.name ASC,
+    COALESCE(mi.issue_year, mi.publication_year, 0) DESC,
     CASE
         WHEN mi.publication_date IS NOT NULL
              AND mi.publication_date <> ''
              AND mi.publication_date <> '0000-00-00'
         THEN mi.publication_date
+        ELSE '0000-01-01'
+    END DESC,
+    CASE
         WHEN mi.release_date IS NOT NULL
              AND mi.release_date <> ''
              AND mi.release_date <> '0000-00-00'
         THEN mi.release_date
         ELSE '0000-01-01'
     END DESC,
-    COALESCE(mi.issue_year, mi.publication_year, 0) DESC,
     CASE
         WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
         ELSE 0
