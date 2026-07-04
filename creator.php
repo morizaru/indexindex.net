@@ -87,8 +87,13 @@ if (!in_array($dir, ['asc', 'desc'], true)) {
 $dir_sql = strtoupper($dir);
 
 $issue_order_asc = "
-    m.name ASC,
-    COALESCE(mi.issue_year, mi.publication_year, 9999) ASC,
+    COALESCE(
+        mi.publication_year,
+        YEAR(mi.publication_date),
+        YEAR(mi.release_date),
+        mi.issue_year,
+        9999
+    ) ASC,
     CASE
         WHEN mi.publication_date IS NOT NULL
              AND mi.publication_date <> ''
@@ -107,12 +112,18 @@ $issue_order_asc = "
         WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
         ELSE 999999
     END ASC,
+    m.name ASC,
     mi.id ASC
 ";
 
 $issue_order_desc = "
-    m.name ASC,
-    COALESCE(mi.issue_year, mi.publication_year, 0) DESC,
+    COALESCE(
+        mi.publication_year,
+        YEAR(mi.publication_date),
+        YEAR(mi.release_date),
+        mi.issue_year,
+        0
+    ) DESC,
     CASE
         WHEN mi.publication_date IS NOT NULL
              AND mi.publication_date <> ''
@@ -131,6 +142,7 @@ $issue_order_desc = "
         WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
         ELSE 0
     END DESC,
+    m.name ASC,
     mi.id DESC
 ";
 
@@ -880,6 +892,9 @@ $current_sort_label = ($view === 'works' && $sort === 'issue') ? '収録年' : (
             td.episode::before { content: "話数"; }
             td.episode-title::before { content: "話タイトル"; }
             td.note-cell::before { content: "備考"; }
+            td.work-title::before { content: "作品名"; }
+            td.num::before { content: "件数"; }
+            td.year::before { content: "収録年"; }
 
             .top-button {
                 right: 14px;
@@ -1030,46 +1045,105 @@ require_once __DIR__ . '/includes/header.php';
         <?php endif; ?>
     </form>
 
-    <?php if (empty($contents)): ?>
-
-        <p class="empty">この人物に関連する掲載情報はまだ登録されていません。データは順次追加・整理しています。</p>
-
-    <?php else: ?>
-
-        <table id="contentsTable">
-            <thead>
-                <tr>
-                    <th>
-                        <a class="sort-link" href="<?= h(build_sort_url('issue', $sort, $dir, $creator_id, $keyword)) ?>">
-                            雑誌・号<span class="sort-mark"><?= h(sort_mark('issue', $sort, $dir)) ?></span>
-                        </a>
-                    </th>
-                    <th class="page">ページ</th>
-                    <th>
-                        <a class="sort-link" href="<?= h(build_sort_url('title', $sort, $dir, $creator_id, $keyword)) ?>">
-                            タイトル<span class="sort-mark"><?= h(sort_mark('title', $sort, $dir)) ?></span>
-                        </a>
-                    </th>
-                    <th class="episode">話数</th>
-                    <th>話タイトル</th>
-                    <th>備考</th>
-                </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($contents as $row): ?>
-                <tr>
-                    <td class="issue">
-                        <a href="issue.php?id=<?= h($row['issue_id']) ?>">
-                            <?= h($row['magazine_name']) ?><br>
-                            <?= h($row['issue_label']) ?>
-                        </a>
-                        <div class="small">
-                            <?= h($row['publisher_name']) ?><br>
-                            <?php if (!empty($row['roles'])): ?>
-                                役割：<?= h($row['roles']) ?>
+    <?php if ($view === 'works'): ?>
+        <?php if (empty($works)): ?>
+            <p class="empty">この人物に関連する作品はまだ登録されていません。データは順次追加・整理しています。</p>
+        <?php else: ?>
+            <table id="worksTable">
+                <thead>
+                    <tr>
+                        <th>
+                            <a class="sort-link" href="<?= h(build_sort_url('title', $sort, $dir, $creator_id, $keyword, $view)) ?>">
+                                作品名<span class="sort-mark"><?= h(sort_mark('title', $sort, $dir)) ?></span>
+                            </a>
+                        </th>
+                        <th class="num">掲載件数</th>
+                        <th class="num">雑誌号数</th>
+                        <th class="year">
+                            <a class="sort-link" href="<?= h(build_sort_url('issue', $sort, $dir, $creator_id, $keyword, $view)) ?>">
+                                収録年<span class="sort-mark"><?= h(sort_mark('issue', $sort, $dir)) ?></span>
+                            </a>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($works as $row): ?>
+                    <tr>
+                        <td class="work-title">
+                            <a href="<?= h($keyword !== '' ? 'work.php?work_id=' . (int)$row['id'] . '&keyword=' . urlencode($keyword) : 'work.php?work_id=' . (int)$row['id']) ?>">
+                                <span class="title-main"><?= h($row['title']) ?></span>
+                            </a>
+                            <?php if (!empty($row['title_sub'])): ?>
+                                <div class="small"><?= h($row['title_sub']) ?></div>
                             <?php endif; ?>
-                        </div>
-                    </td>
+                            <div class="small">
+                                <?php if (!empty($row['publication_type'])): ?>
+                                    区分：<?= h($row['publication_type']) ?><br>
+                                <?php endif; ?>
+                                <?php if (!empty($row['magazine_names'])): ?>
+                                    雑誌：<?= h($row['magazine_names']) ?><br>
+                                <?php endif; ?>
+                                <?php if (!empty($row['roles'])): ?>
+                                    役割：<?= h($row['roles']) ?>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                        <td class="num"><?= h($row['content_count']) ?></td>
+                        <td class="num"><?= h($row['issue_count']) ?></td>
+                        <td class="year">
+                            <?php if ($row['first_year'] && $row['last_year']): ?>
+                                <?php if ($row['first_year'] == $row['last_year']): ?>
+                                    <?= h($row['first_year']) ?>年
+                                <?php else: ?>
+                                    <?= h($row['first_year']) ?>年〜<?= h($row['last_year']) ?>年
+                                <?php endif; ?>
+                            <?php else: ?>
+                                -
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    <?php else: ?>
+        <?php if (empty($contents)): ?>
+            <p class="empty">この人物に関連する掲載情報はまだ登録されていません。データは順次追加・整理しています。</p>
+        <?php else: ?>
+            <table id="contentsTable">
+                <thead>
+                    <tr>
+                        <th>
+                            <a class="sort-link" href="<?= h(build_sort_url('issue', $sort, $dir, $creator_id, $keyword, $view)) ?>">
+                                雑誌・号<span class="sort-mark"><?= h(sort_mark('issue', $sort, $dir)) ?></span>
+                            </a>
+                        </th>
+                        <th class="page">ページ</th>
+                        <th>
+                            <a class="sort-link" href="<?= h(build_sort_url('title', $sort, $dir, $creator_id, $keyword, $view)) ?>">
+                                タイトル<span class="sort-mark"><?= h(sort_mark('title', $sort, $dir)) ?></span>
+                            </a>
+                        </th>
+                        <th class="episode">話数</th>
+                        <th>話タイトル</th>
+                        <th>備考</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($contents as $row): ?>
+                    <tr>
+                        <td class="issue">
+                            <a href="issue.php?id=<?= h($row['issue_id']) ?>">
+                                <?= h($row['magazine_name']) ?><br>
+                                <?= h($row['issue_label']) ?>
+                            </a>
+                            <div class="small">
+                                <?= h($row['publisher_name']) ?><br>
+                                <?php if (!empty($row['roles'])): ?>
+                                    役割：<?= h($row['roles']) ?>
+                                <?php endif; ?>
+                            </div>
+                        </td>
 
                         <td class="page">
                             <?php if ($row['page_start'] !== null && $row['page_start'] !== '' && $row['page_end'] !== null && $row['page_end'] !== ''): ?>
@@ -1093,20 +1167,18 @@ require_once __DIR__ . '/includes/header.php';
                             </span>
                         </td>
 
-                    <td class="episode"><?= h($row['episode_no'] ?? '') ?></td>
-
-                    <td class="episode-title"><?= h($row['episode_title'] ?? '') ?></td>
-
-                    <td class="note-cell">
-                        <?php if (!empty($row['note'])): ?>
-                            <span class="note"><?= h($row['note']) ?></span>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-
+                        <td class="episode"><?= h($row['episode_no'] ?? '') ?></td>
+                        <td class="episode-title"><?= h($row['episode_title'] ?? '') ?></td>
+                        <td class="note-cell">
+                            <?php if (!empty($row['note'])): ?>
+                                <span class="note"><?= h($row['note']) ?></span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
     <?php endif; ?>
 
     <?php if ($total_pages > 1): ?>
