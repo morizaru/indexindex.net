@@ -158,6 +158,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$copy_add_url = 'magazine_add.php?' . http_build_query([
+    'publisher_id' => $publisher_id,
+    'name' => $name,
+    'name_search' => $name_search,
+    'name_romaji' => $name_romaji,
+    'publication_frequency' => $publication_frequency,
+    'note' => $note,
+]);
+
 // 雑誌号一覧
 $stmt = $pdo->prepare("
     SELECT
@@ -237,6 +246,30 @@ $issues = $stmt->fetchAll();
 
         .links a:hover {
             text-decoration: underline;
+        }
+
+        .button-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .copy-add-button {
+            display: inline-block;
+            padding: 9px 14px;
+            border-radius: 4px;
+            background: #777;
+            color: #fff;
+            font-weight: bold;
+            line-height: 1;
+            text-decoration: none;
+        }
+
+        .copy-add-button:hover {
+            background: #555;
+            text-decoration: none;
         }
 
         .empty {
@@ -429,7 +462,10 @@ $issues = $stmt->fetchAll();
             </div>
         </div>
 
-        <button type="submit">更新する</button>
+        <div class="button-row">
+            <button type="submit">更新する</button>
+            <a class="copy-add-button" href="<?= h($copy_add_url) ?>">コピーして新規登録</a>
+        </div>
 
     </form>
 

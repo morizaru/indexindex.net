@@ -16,14 +16,18 @@ function nullable_text($value) {
 
 $message = '';
 $error = '';
+$publication_frequency_options = ['', '週刊', '隔週刊', '月2回刊', '月刊', '隔月刊', '季刊', '日刊', '不定期刊'];
 
 $publisher_id = isset($_GET['publisher_id']) ? (int)$_GET['publisher_id'] : 0;
-$name = '';
-$name_search = '';
-$name_romaji = '';
-$publication_frequency = '';
-$note = '';
-$publication_frequency_options = ['', '週刊', '隔週刊', '月2回刊', '月刊', '隔月刊', '季刊', '日刊', '不定期刊'];
+$name = isset($_GET['name']) ? trim((string)$_GET['name']) : '';
+$name_search = isset($_GET['name_search']) ? trim((string)$_GET['name_search']) : '';
+$name_romaji = isset($_GET['name_romaji']) ? trim((string)$_GET['name_romaji']) : '';
+$publication_frequency = isset($_GET['publication_frequency']) ? trim((string)$_GET['publication_frequency']) : '';
+$note = isset($_GET['note']) ? trim((string)$_GET['note']) : '';
+
+if (!in_array($publication_frequency, $publication_frequency_options, true)) {
+    $publication_frequency = '';
+}
 
 // 出版社一覧
 $stmt = $pdo->query("
