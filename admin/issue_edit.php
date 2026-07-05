@@ -393,6 +393,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$copy_publisher_name = '';
+foreach ($publishers as $publisher) {
+    if ((int)$publisher['id'] === (int)$publisher_id) {
+        $copy_publisher_name = $publisher['name'];
+        break;
+    }
+}
+
+$copy_magazine_name = '';
+foreach ($magazines as $magazine) {
+    if ((int)$magazine['id'] === (int)$magazine_id) {
+        $copy_magazine_name = $magazine['name'];
+        break;
+    }
+}
+
+$copy_add_url = 'issue_add.php?' . http_build_query([
+    'publisher_name' => $copy_publisher_name,
+    'magazine_name' => $copy_magazine_name,
+    'magazine_id' => $magazine_id,
+    'magazine_code' => $magazine_code,
+    'issue_label' => $issue_label,
+    'issue_label_special' => $issue_label_special,
+    'issue_year' => $issue_year,
+    'issue_vol' => $issue_vol,
+    'issue_no' => $issue_no,
+    'issue_full_vol' => $issue_full_vol,
+    'publication_date' => $publication_date,
+    'publication_year' => $publication_year,
+    'publication_month' => $publication_month,
+    'publication_day' => $publication_day,
+    'release_date' => $release_date,
+    'status' => $status,
+]);
+
 // 関連データ件数
 $stmt = $pdo->prepare("
     SELECT COUNT(*) AS cnt
@@ -470,6 +505,30 @@ $source_images = $stmt->fetchAll();
             border: 1px solid #ddd;
             background: #fff;
             margin-bottom: 8px;
+        }
+
+        .button-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .copy-add-button {
+            display: inline-block;
+            padding: 9px 14px;
+            border-radius: 4px;
+            background: #777;
+            color: #fff;
+            font-weight: bold;
+            line-height: 1;
+            text-decoration: none;
+        }
+
+        .copy-add-button:hover {
+            background: #555;
+            text-decoration: none;
         }
     </style>
 </head>
@@ -638,7 +697,10 @@ $source_images = $stmt->fetchAll();
             <input type="text" name="source_image_note" value="<?= h($source_image_note) ?>" placeholder="例：目次ページ">
         </div>
 
-        <button type="submit">更新する</button>
+        <div class="button-row">
+            <button type="submit">更新する</button>
+            <a class="copy-add-button" href="<?= h($copy_add_url) ?>">コピーして新規登録</a>
+        </div>
 
     </form>
 

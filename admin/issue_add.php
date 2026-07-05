@@ -65,32 +65,71 @@ function table_has_column($pdo, $table, $column) {
 $message = '';
 $error = '';
 
-$publisher_name = '';
-$magazine_name = '';
-$magazine_id = 0;
-$magazine_code = '';
+$publisher_name = isset($_GET['publisher_name']) ? trim((string)$_GET['publisher_name']) : '';
+$magazine_name = isset($_GET['magazine_name']) ? trim((string)$_GET['magazine_name']) : '';
+$magazine_id = isset($_GET['magazine_id']) ? (int)$_GET['magazine_id'] : 0;
+$magazine_code = isset($_GET['magazine_code']) ? trim((string)$_GET['magazine_code']) : '';
 
-$issue_label = '';
-$issue_label_special = '';
-$issue_year = '';
-$issue_vol = '';
-$issue_no = '';
-$issue_full_vol = '';
+$issue_label = isset($_GET['issue_label']) ? trim((string)$_GET['issue_label']) : '';
+$issue_label_special = isset($_GET['issue_label_special']) ? trim((string)$_GET['issue_label_special']) : '';
+$issue_year = isset($_GET['issue_year']) ? trim((string)$_GET['issue_year']) : '';
+$issue_vol = isset($_GET['issue_vol']) ? trim((string)$_GET['issue_vol']) : '';
+$issue_no = isset($_GET['issue_no']) ? trim((string)$_GET['issue_no']) : '';
+$issue_full_vol = isset($_GET['issue_full_vol']) ? trim((string)$_GET['issue_full_vol']) : '';
 
-$publication_date = '';
-$publication_year = '';
-$publication_month = '';
-$publication_day = '';
+$publication_date = isset($_GET['publication_date']) ? trim((string)$_GET['publication_date']) : '';
+$publication_year = isset($_GET['publication_year']) ? trim((string)$_GET['publication_year']) : '';
+$publication_month = isset($_GET['publication_month']) ? trim((string)$_GET['publication_month']) : '';
+$publication_day = isset($_GET['publication_day']) ? trim((string)$_GET['publication_day']) : '';
 
-$release_date = '';
-$is_digital = 0;
-$note = '';
-$status = 'approved';
+$release_date = isset($_GET['release_date']) ? trim((string)$_GET['release_date']) : '';
+$is_digital = isset($_GET['is_digital']) ? (int)$_GET['is_digital'] : 0;
+$note = isset($_GET['note']) ? trim((string)$_GET['note']) : '';
+$status = isset($_GET['status']) ? trim((string)$_GET['status']) : 'approved';
 $source_image_note = '';
+
+if (!array_key_exists($status, issue_status_options())) {
+    $status = 'approved';
+}
+
+if ($is_digital !== 1) {
+    $is_digital = 0;
+}
 
 // 出典画像保存先
 $upload_dir = __DIR__ . '/../uploads/source_images/';
 $upload_url_base = 'uploads/source_images/';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $magazine_id > 0 && ($publisher_name === '' || $magazine_name === '')) {
+    $stmt = $pdo->prepare("
+        SELECT
+            m.name AS magazine_name,
+            m.magazine_code,
+            p.name AS publisher_name
+        FROM magazines m
+        JOIN publishers p ON m.publisher_id = p.id
+        WHERE m.id = :id
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':id' => $magazine_id
+    ]);
+    $copy_magazine = $stmt->fetch();
+
+    if ($copy_magazine) {
+        if ($publisher_name === '') {
+            $publisher_name = $copy_magazine['publisher_name'] ?? '';
+        }
+
+        if ($magazine_name === '') {
+            $magazine_name = $copy_magazine['magazine_name'] ?? '';
+        }
+
+        if ($magazine_code === '') {
+            $magazine_code = $copy_magazine['magazine_code'] ?? '';
+        }
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $publisher_name       = trim($_POST['publisher_name'] ?? '');
@@ -485,6 +524,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background: #f0f6ff;
             outline: none;
         }
+
+        .button-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        button.copy-add-button {
+            background: #777;
+            border-color: #777;
+        }
+
+        button.copy-add-button:hover {
+            background: #555;
+            border-color: #555;
+        }
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -697,7 +754,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="error"><?= h($error) ?></div>
     <?php endif; ?>
 
-    <form method="post" action="issue_add.php" enctype="multipart/form-data">
+    <form method="post" action="issue_add.php" enctype="multipart/form-data" id="issueAddForm">
 
         <div class="form-grid">
             <div class="form-row">
@@ -844,10 +901,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <input type="text" name="source_image_note" value="<?= h($source_image_note) ?>" placeholder="例：目次ページ">
         </div>
 
-        <button type="submit">登録する</button>
+        <div class="button-row">
+            <button type="submit">登録する</button>
+            <button type="button" class="copy-add-button" id="copyAddButton">コピーして新規登録</button>
+        </div>
 
     </form>
 
 </div>
+<script>
+const issueAddForm = document.getElementById('issueAddForm');
+const copyAddButton = document.getElementById('copyAddButton');
+
+if (issueAddForm && copyAddButton) {
+    copyAddButton.addEventListener('click', function () {
+        const formData = new FormData(issueAddForm);
+        const params = new URLSearchParams();
+        const copyFields = [
+            'publisher_name',
+            'magazine_name',
+            'magazine_id',
+            'magazine_code',
+            'issue_label',
+            'issue_label_special',
+            'issue_year',
+            'issue_vol',
+            'issue_no',
+            'issue_full_vol',
+            'is_digital',
+            'note',
+            'publication_date',
+            'publication_year',
+            'publication_month',
+            'publication_day',
+            'release_date',
+            'status'
+        ];
+
+        copyFields.forEach(function (name) {
+            if (formData.has(name)) {
+                params.set(name, formData.get(name));
+            }
+        });
+
+        window.location.href = 'issue_add.php?' + params.toString();
+    });
+}
+</script>
 </body>
 </html>
