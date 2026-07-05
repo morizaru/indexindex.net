@@ -40,10 +40,35 @@ function require_site_stats_columns(array $columns): void {
 function get_current_site_stats(PDO $pdo): array {
     return [
         'snapshot_at' => date('Y-m-d 00:00:00'),
-        'magazine_count' => (int)$pdo->query("SELECT COUNT(*) FROM magazines")->fetchColumn(),
-        'issue_count' => (int)$pdo->query("SELECT COUNT(*) FROM magazine_issues WHERE status = 'approved'")->fetchColumn(),
-        'content_count' => (int)$pdo->query("SELECT COUNT(*) FROM works")->fetchColumn(),
-        'creator_count' => (int)$pdo->query("SELECT COUNT(*) FROM creators")->fetchColumn(),
+        'magazine_count' => (int)$pdo->query("
+            SELECT COUNT(DISTINCT m.id)
+            FROM magazines m
+            JOIN magazine_issues mi ON mi.magazine_id = m.id
+            JOIN issue_contents ic ON ic.issue_id = mi.id
+            WHERE mi.status = 'approved'
+        ")->fetchColumn(),
+        'issue_count' => (int)$pdo->query("
+            SELECT COUNT(DISTINCT mi.id)
+            FROM magazine_issues mi
+            JOIN issue_contents ic ON ic.issue_id = mi.id
+            WHERE mi.status = 'approved'
+        ")->fetchColumn(),
+        'content_count' => (int)$pdo->query("
+            SELECT COUNT(DISTINCT w.id)
+            FROM works w
+            JOIN issue_contents ic ON ic.work_id = w.id
+            JOIN magazine_issues mi ON mi.id = ic.issue_id
+            WHERE mi.status = 'approved'
+        ")->fetchColumn(),
+        'creator_count' => (int)$pdo->query("
+            SELECT COUNT(DISTINCT c.id)
+            FROM creators c
+            JOIN content_creators cc ON cc.creator_id = c.id
+            JOIN issue_contents ic ON ic.id = cc.content_id
+            JOIN magazine_issues mi ON mi.id = ic.issue_id
+            WHERE mi.status = 'approved'
+              AND cc.is_visible = 1
+        ")->fetchColumn(),
     ];
 }
 
