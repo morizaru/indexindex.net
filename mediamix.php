@@ -131,24 +131,33 @@ $rows = $stmt->fetchAll();
         .tab-nav {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 4px;
             margin: 16px 0;
+            border-bottom: 1px solid #ddd;
         }
         .tab-nav a,
         .tab-nav span {
             display: inline-block;
-            padding: 8px 12px;
+            padding: 9px 14px;
             border: 1px solid #ddd;
-            border-radius: 4px;
-            background: #fff;
-            color: #0066cc;
+            border-bottom: none;
+            border-radius: 7px 7px 0 0;
+            background: #f3f3f3;
+            color: #444;
             font-weight: bold;
             text-decoration: none;
         }
+        .tab-nav a:hover {
+            background: #fff;
+            color: #0066cc;
+            text-decoration: none;
+        }
         .tab-nav .active {
-            background: #333;
-            border-color: #333;
-            color: #fff;
+            position: relative;
+            top: 1px;
+            background: #fff;
+            border-color: #bbb;
+            color: #222;
         }
         .filter-form {
             margin: 16px 0;

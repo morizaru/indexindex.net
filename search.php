@@ -435,25 +435,34 @@ foreach ($all_result_tabs as $tab_key => $tab_label) {
         .result-tabs {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 4px;
             margin: 0 0 14px;
+            border-bottom: 1px solid #ddd;
         }
 
         .result-tab {
-            padding: 8px 14px;
-            border: 1px solid #ccc;
-            background: #fff;
-            color: #333;
-            border-radius: 999px;
+            padding: 9px 14px;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            background: #f3f3f3;
+            color: #444;
+            border-radius: 7px 7px 0 0;
             cursor: pointer;
             font-size: 14px;
             font-weight: bold;
         }
 
+        .result-tab:hover {
+            background: #fff;
+            color: #0066cc;
+        }
+
         .result-tab.is-active {
-            background: #333;
-            border-color: #333;
-            color: #fff;
+            position: relative;
+            top: 1px;
+            background: #fff;
+            border-color: #bbb;
+            color: #222;
         }
 
         .tab-panel {
