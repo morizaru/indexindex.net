@@ -14,6 +14,28 @@ function nullable_text($value) {
     return ($value !== '') ? $value : null;
 }
 
+function nullable_year($value) {
+    $value = trim((string)$value);
+    return ($value !== '') ? (int)$value : null;
+}
+
+function validate_year_field($value, $label) {
+    if ($value === '') {
+        return '';
+    }
+
+    if (!preg_match('/^[0-9]{4}$/', $value) || $value === '0000') {
+        return $label . 'は4桁の西暦で入力してください。';
+    }
+
+    $year = (int)$value;
+    if ($year < 1800 || $year > 2100) {
+        return $label . 'は1800〜2100の範囲で入力してください。';
+    }
+
+    return '';
+}
+
 $magazine_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -49,6 +71,8 @@ $stmt = $pdo->prepare("
         m.name_search,
         m.name_romaji,
         m.publication_frequency,
+        m.founded_year,
+        m.suspended_year,
         m.note,
         m.created_at,
         m.updated_at,
@@ -72,6 +96,8 @@ $publisher_id = (int)$magazine['publisher_id'];
 $name_search = $magazine['name_search'] ?? '';
 $name_romaji = $magazine['name_romaji'] ?? '';
 $publication_frequency = $magazine['publication_frequency'] ?? '';
+$founded_year = $magazine['founded_year'] ?? '';
+$suspended_year = $magazine['suspended_year'] ?? '';
 $note = $magazine['note'] ?? '';
 
 // 更新処理
@@ -81,16 +107,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name_search = trim($_POST['name_search'] ?? '');
     $name_romaji = trim($_POST['name_romaji'] ?? '');
     $publication_frequency = trim($_POST['publication_frequency'] ?? '');
+    $founded_year = trim($_POST['founded_year'] ?? '');
+    $suspended_year = trim($_POST['suspended_year'] ?? '');
     $note = trim($_POST['note'] ?? '');
 
     if (!in_array($publication_frequency, $publication_frequency_options, true)) {
         $publication_frequency = '';
     }
 
+    $founded_year_error = validate_year_field($founded_year, '創刊年');
+    $suspended_year_error = validate_year_field($suspended_year, '休刊年');
+
     if ($name === '') {
         $error = '雑誌名を入力してください。';
     } elseif ($publisher_id <= 0) {
         $error = '出版社を選択してください。';
+    } elseif ($founded_year_error !== '') {
+        $error = $founded_year_error;
+    } elseif ($suspended_year_error !== '') {
+        $error = $suspended_year_error;
+    } elseif ($founded_year !== '' && $suspended_year !== '' && (int)$suspended_year < (int)$founded_year) {
+        $error = '休刊年は創刊年以降の年を入力してください。';
     } else {
         try {
             // 出版社存在チェック
@@ -135,6 +172,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             name_search = :name_search,
                             name_romaji = :name_romaji,
                             publication_frequency = :publication_frequency,
+                            founded_year = :founded_year,
+                            suspended_year = :suspended_year,
                             note = :note
                         WHERE id = :id
                     ");
@@ -144,6 +183,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':name_search' => nullable_text($name_search),
                         ':name_romaji' => nullable_text($name_romaji),
                         ':publication_frequency' => nullable_text($publication_frequency),
+                        ':founded_year' => nullable_year($founded_year),
+                        ':suspended_year' => nullable_year($suspended_year),
                         ':note' => nullable_text($note),
                         ':id' => $magazine_id
                     ]);
@@ -164,6 +205,8 @@ $copy_add_url = 'magazine_add.php?' . http_build_query([
     'name_search' => $name_search,
     'name_romaji' => $name_romaji,
     'publication_frequency' => $publication_frequency,
+    'founded_year' => $founded_year,
+    'suspended_year' => $suspended_year,
     'note' => $note,
 ]);
 
@@ -229,6 +272,13 @@ $issues = $stmt->fetchAll();
         }
 
         .form-grid .full-row {
+            grid-column: 1 / -1;
+        }
+
+        .publication-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 16px;
             grid-column: 1 / -1;
         }
 
@@ -343,6 +393,10 @@ $issues = $stmt->fetchAll();
                 display: block;
             }
 
+            .publication-row {
+                display: block;
+            }
+
             table, thead, tbody, tr, th, td {
                 display: block;
             }
@@ -444,16 +498,28 @@ $issues = $stmt->fetchAll();
                 <input type="text" name="name_romaji" value="<?= h($name_romaji) ?>">
             </div>
 
-            <div class="form-row">
-                <label>刊行頻度</label>
-                <select name="publication_frequency">
-                    <option value="">未選択</option>
-                    <?php foreach (array_slice($publication_frequency_options, 1) as $option): ?>
-                        <option value="<?= h($option) ?>" <?= ($publication_frequency === $option) ? 'selected' : '' ?>>
-                            <?= h($option) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
+            <div class="publication-row">
+                <div class="form-row">
+                    <label>刊行頻度</label>
+                    <select name="publication_frequency">
+                        <option value="">未選択</option>
+                        <?php foreach (array_slice($publication_frequency_options, 1) as $option): ?>
+                            <option value="<?= h($option) ?>" <?= ($publication_frequency === $option) ? 'selected' : '' ?>>
+                                <?= h($option) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <label>創刊年</label>
+                    <input type="number" name="founded_year" value="<?= h($founded_year) ?>" min="1800" max="2100" step="1" placeholder="例：1968">
+                </div>
+
+                <div class="form-row">
+                    <label>休刊年</label>
+                    <input type="number" name="suspended_year" value="<?= h($suspended_year) ?>" min="1800" max="2100" step="1" placeholder="例：1968">
+                </div>
             </div>
 
             <div class="form-row full-row">
