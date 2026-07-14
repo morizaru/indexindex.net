@@ -20,12 +20,16 @@ $defaultFrom = $today;
 
 $from = $_GET['from'] ?? $defaultFrom;
 $to = $_GET['to'] ?? $today;
+$botUaName = $_GET['bot_ua_name'] ?? 'Other Bot';
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
     $from = $defaultFrom;
 }
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
     $to = $today;
+}
+if (!is_string($botUaName) || $botUaName === '' || mb_strlen($botUaName) > 80 || preg_match('/[\x00-\x1F\x7F]/', $botUaName)) {
+    $botUaName = 'Other Bot';
 }
 
 if ($from > $to) {
@@ -336,6 +340,7 @@ $browserRows = ii_fetch_all($pdo, "
 ", $params);
 
 $hasBotTable = ii_table_exists($pdo, 'access_bot_daily');
+$hasBotUaTable = ii_table_exists($pdo, 'access_bot_user_agents_daily');
 $botParams = [':from_date' => $from, ':to_date' => $to];
 $botCount = ['cnt' => 0];
 $botDailyRows = [];
@@ -347,6 +352,8 @@ $recentBotProtectionRows = [];
 $behaviorBotPageRows = [];
 $recentBotNameRows = [];
 $botBreakdownRows = [];
+$botUaNameRows = [];
+$botUaRows = [];
 
 if ($hasBotTable) {
     $botCount = ii_fetch_one($pdo, "
@@ -454,6 +461,45 @@ if ($hasBotTable) {
     ");
 }
 
+if ($hasBotUaTable) {
+    try {
+        $botUaNameRows = ii_fetch_all($pdo, "
+            SELECT bot_name, SUM(count) AS cnt
+            FROM access_bot_user_agents_daily
+            WHERE access_date BETWEEN :from_date AND :to_date
+            GROUP BY bot_name
+            ORDER BY cnt DESC
+        ", $botParams);
+    } catch (Throwable $e) {
+        $botUaNameRows = [];
+    }
+
+    try {
+        $botUaRows = ii_fetch_all($pdo, "
+            SELECT
+                bot_name,
+                COALESCE(NULLIF(user_agent, ''), '(empty)') AS user_agent,
+                SUM(count) AS cnt
+            FROM access_bot_user_agents_daily
+            WHERE access_date BETWEEN :from_date AND :to_date
+              AND bot_name = :bot_name
+            GROUP BY bot_name, user_agent_hash, user_agent
+            ORDER BY cnt DESC
+            LIMIT 50
+        ", $botParams + [':bot_name' => $botUaName]);
+    } catch (Throwable $e) {
+        $botUaRows = [];
+    }
+}
+
+$botUaSelectedInOptions = false;
+foreach ($botUaNameRows as $row) {
+    if ((string)($row['bot_name'] ?? '') === $botUaName) {
+        $botUaSelectedInOptions = true;
+        break;
+    }
+}
+
 $botCountMap = [];
 foreach ($botNameRows as $row) {
     $botCountMap[(string)($row['bot_name'] ?? '')] = (int)($row['cnt'] ?? 0);
@@ -514,7 +560,7 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
         .card { background: #fff; border-radius: 14px; padding: 18px; margin-bottom: 18px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); }
         .filter { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
         label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-        input[type="date"] { padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+        input[type="date"], select { padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
         button { border: 0; border-radius: 8px; padding: 10px 16px; background: #111827; color: #fff; font-weight: 700; cursor: pointer; }
         .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
         .summary-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; }
@@ -540,6 +586,7 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
         <form class="filter" method="get">
             <div><label>アクセス解析表示期間 FROM</label><input type="date" name="from" value="<?= h($from) ?>"></div>
             <div><label>アクセス解析表示期間 TO</label><input type="date" name="to" value="<?= h($to) ?>"></div>
+            <div><label>bot User-Agent内訳</label><select name="bot_ua_name"><option value="Other Bot"<?= $botUaName === 'Other Bot' ? ' selected' : '' ?>>Other Bot</option><?php foreach ($botUaNameRows as $row): $optionBotName = (string)($row['bot_name'] ?? ''); if ($optionBotName === '' || $optionBotName === 'Other Bot') continue; ?><option value="<?= h($optionBotName) ?>"<?= $botUaName === $optionBotName ? ' selected' : '' ?>><?= h(ii_bot_display_name($optionBotName)) ?> (<?= number_format((int)($row['cnt'] ?? 0)) ?>)</option><?php endforeach; ?><?php if ($botUaName !== 'Other Bot' && !$botUaSelectedInOptions): ?><option value="<?= h($botUaName) ?>" selected><?= h(ii_bot_display_name($botUaName)) ?></option><?php endif; ?></select></div>
             <div><button type="submit">表示</button></div>
             <div class="small">表示期間：<?= h($from) ?> 〜 <?= h($to) ?> / 通常アクセスはbot除外 / bot数は日別集計 / 対象：/indexindex/ 配下</div>
         </form>
@@ -587,6 +634,8 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
         <div class="card"><h2>bot合計の内訳</h2><table><thead><tr><th>bot_name</th><th class="right">件数</th><th class="right">割合</th></tr></thead><tbody><?php foreach ($botBreakdownRows as $row): ?><tr><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td><td class="right"><?= h(ii_percentage($row['cnt'] ?? 0, $botTotalCount)) ?></td></tr><?php endforeach; ?><?php if (!$botBreakdownRows): ?><tr><td colspan="3">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">表示期間内のbot合計が、どの bot_name で集計されているかを表示します。</div></div>
         <div class="card"><h2>分散bot判定メモ</h2><?php if ($behaviorBotCount > 0): ?><p>Behavior Bot / Distributed が表示期間内に発生しています。</p><?php else: ?><p>Behavior Bot / Distributed は表示期間内ではまだ発生していません。</p><p class="small">User-Agentで Googlebot / Bingbot / Other Bot / Crawler / Bot と判定されたアクセスは、Behavior判定より先に既存bot名で access_bot_daily に集計されます。分散bot候補が通常ログ側に残っているかは下の「通常ログ側 分散bot候補」で確認してください。</p><?php endif; ?></div>
     </div>
+
+    <div class="card"><h2>Other Bot User-Agent内訳</h2><?php if (!$hasBotUaTable): ?><p>User-Agent内訳テーブル未作成</p><?php else: ?><table><thead><tr><th>bot_name</th><th>User-Agent</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botUaRows as $row): ?><tr><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="mono"><?= h($row['user_agent'] ?? '') ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$botUaRows): ?><tr><td colspan="3">データなし</td></tr><?php endif; ?></tbody></table><div class="small">表示期間内の <?= h(ii_bot_display_name($botUaName)) ?> を User-Agent 別に上位50件表示します。上部の選択欄で GPTBot / Amazonbot / Meta External Agent なども確認できます。</div><?php endif; ?></div>
 
     <div class="card"><h2>直近のbot対策状況</h2><table><thead><tr><th>日付</th><th class="right">Attack / SQL Injection</th><th class="right">Blocked IP Hash</th><th class="right">Behavior Bot / Distributed</th><th class="right">bot合計</th></tr></thead><tbody><?php foreach ($recentBotProtectionRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="right"><?= number_format((int)$row['attack_count']) ?></td><td class="right"><?= number_format((int)$row['blocked_ip_count']) ?></td><td class="right"><?= number_format((int)$row['behavior_count']) ?></td><td class="right"><?= number_format((int)$row['bot_total']) ?></td></tr><?php endforeach; ?><?php if (!$recentBotProtectionRows): ?><tr><td colspan="5">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">直近7日間の対策系bot分類とbot合計です。</div></div>
 

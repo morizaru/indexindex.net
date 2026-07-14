@@ -399,6 +399,36 @@ if (!function_exists('ii_access_log')) {
             // 公開ページを止めないため、bot集計失敗は無視
             return;
         }
+
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO access_bot_user_agents_daily (
+                    access_date,
+                    bot_name,
+                    user_agent_hash,
+                    user_agent,
+                    count
+                ) VALUES (
+                    CURDATE(),
+                    :bot_name,
+                    :user_agent_hash,
+                    :user_agent,
+                    1
+                )
+                ON DUPLICATE KEY UPDATE
+                    user_agent = VALUES(user_agent),
+                    count = count + 1,
+                    updated_at = CURRENT_TIMESTAMP
+            ");
+
+            $stmt->execute([
+                ':bot_name' => $botName,
+                ':user_agent_hash' => hash('sha256', $ua),
+                ':user_agent' => $ua,
+            ]);
+        } catch (Throwable $e) {
+            return;
+        }
     }
 
     function ii_access_detect_bot_name(string $ua): string {
