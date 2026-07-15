@@ -246,8 +246,8 @@ $stmt = $pdo->prepare("
             CASE
                 WHEN cc.role IS NOT NULL
                      AND cc.role <> ''
+                     AND cc.role <> 'author'
                 THEN cc.role
-                ELSE 'author'
             END
             ORDER BY cc.role
             SEPARATOR ' / '
