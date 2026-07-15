@@ -236,12 +236,14 @@ function render_creator_links($creators_data) {
     return implode(' / ', $parts);
 }
 
-$work_id = isset($_GET['work_id']) ? (int)$_GET['work_id'] : (isset($_GET['id']) ? (int)$_GET['id'] : 0);
-$keyword = isset($_GET['keyword']) ? trim((string)$_GET['keyword']) : '';
-
-if ($work_id <= 0) {
+$work_id_raw = $_GET['work_id'] ?? ($_GET['id'] ?? null);
+if (!is_string($work_id_raw) || !ctype_digit($work_id_raw) || (int)$work_id_raw <= 0) {
+    http_response_code(400);
     exit('作品IDが指定されていません。');
 }
+
+$work_id = (int)$work_id_raw;
+$keyword = isset($_GET['keyword']) ? trim((string)$_GET['keyword']) : '';
 
 // 作品情報
 $stmt = $pdo->prepare("
@@ -266,6 +268,7 @@ $stmt->execute([
 $work = $stmt->fetch();
 
 if (!$work) {
+    http_response_code(404);
     exit('指定された作品が見つかりません。');
 }
 
