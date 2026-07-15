@@ -1,6 +1,17 @@
 <?php
 // creator.php
 
+if (
+    !isset($_GET['creator_id']) &&
+    isset($_GET['creators_id']) &&
+    is_string($_GET['creators_id']) &&
+    ctype_digit($_GET['creators_id']) &&
+    (int)$_GET['creators_id'] > 0
+) {
+    header('Location: https://morizaru.net/indexindex/creator.php?creator_id=' . (int)$_GET['creators_id'], true, 301);
+    exit;
+}
+
 header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/app/config.php';
@@ -59,15 +70,17 @@ function sort_mark($sort_key, $current_sort, $current_dir) {
     return $current_dir === 'asc' ? ' ▲' : ' ▼';
 }
 
-$creator_id = isset($_GET['creator_id']) ? (int)$_GET['creator_id'] : 0;
+$creator_id_raw = $_GET['creator_id'] ?? null;
+if (!is_string($creator_id_raw) || !ctype_digit($creator_id_raw) || (int)$creator_id_raw <= 0) {
+    http_response_code(400);
+    exit('人物IDが指定されていません。');
+}
+
+$creator_id = (int)$creator_id_raw;
 $keyword = isset($_GET['keyword']) ? trim((string)$_GET['keyword']) : '';
 $view = isset($_GET['view']) ? (string)$_GET['view'] : 'issues';
 if (!in_array($view, ['issues', 'works'], true)) {
     $view = 'issues';
-}
-
-if ($creator_id <= 0) {
-    exit('人物IDが指定されていません。');
 }
 
 $page     = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
@@ -198,6 +211,7 @@ $stmt->execute([
 $creator = $stmt->fetch();
 
 if (!$creator) {
+    http_response_code(404);
     exit('指定された人物が見つかりません。');
 }
 
@@ -451,6 +465,7 @@ $current_sort_label = ($view === 'works' && $sort === 'issue') ? '収録年' : (
     <?php if (!empty($should_noindex)): ?>
         <meta name="robots" content="noindex,follow">
     <?php endif; ?>
+    <link rel="canonical" href="https://morizaru.net/indexindex/creator.php?creator_id=<?= h($creator_id) ?>">
     <title><?= h($creator['name']) ?> - 人物詳細 - INDEXINDEX</title>
     <style>
         body {
