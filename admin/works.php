@@ -221,16 +221,21 @@ if ($publication_year !== '') {
 // 一覧取得
 $where = [];
 $params = [];
+$q_is_id = ($q !== '' && preg_match('/^[0-9]+$/', $q));
 
 if ($q !== '') {
     $where[] = "(
         w.title LIKE :q_title
         OR w.title_sub LIKE :q_title_sub
         OR w.title_kana LIKE :q_title_kana
+        " . ($q_is_id ? "OR w.id = :q_id" : "") . "
     )";
     $params[':q_title'] = '%' . $q . '%';
     $params[':q_title_sub'] = '%' . $q . '%';
     $params[':q_title_kana'] = '%' . $q . '%';
+    if ($q_is_id) {
+        $params[':q_id'] = (int)$q;
+    }
 }
 
 if ($publisher_id > 0 || $magazine_id > 0 || $publication_year !== '') {
@@ -322,7 +327,7 @@ $sql = "
 
 $stmt = $pdo->prepare($sql);
 foreach ($params as $key => $value) {
-    $param_type = strpos($key, ':q_') === 0 ? PDO::PARAM_STR : PDO::PARAM_INT;
+    $param_type = (strpos($key, ':q_') === 0 && $key !== ':q_id') ? PDO::PARAM_STR : PDO::PARAM_INT;
     $stmt->bindValue($key, $value, $param_type);
 }
 $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
