@@ -220,16 +220,21 @@ if ($publication_year !== '') {
 // 一覧取得
 $where = [];
 $params = [];
+$q_is_id = ($q !== '' && preg_match('/^[0-9]+$/', $q));
 
 if ($q !== '') {
     $where[] = "(
         c.name LIKE :q_name
         OR c.name_kana LIKE :q_name_kana
         OR c.name_search LIKE :q_name_search
+        " . ($q_is_id ? "OR c.id = :q_id" : "") . "
     )";
     $params[':q_name'] = '%' . $q . '%';
     $params[':q_name_kana'] = '%' . $q . '%';
     $params[':q_name_search'] = '%' . $q . '%';
+    if ($q_is_id) {
+        $params[':q_id'] = (int)$q;
+    }
 }
 
 if ($publisher_id > 0 || $magazine_id > 0 || $publication_year !== '') {
@@ -315,7 +320,7 @@ $sql = "
 
 $stmt = $pdo->prepare($sql);
 foreach ($params as $key => $value) {
-    $param_type = strpos($key, ':q_') === 0 ? PDO::PARAM_STR : PDO::PARAM_INT;
+    $param_type = (strpos($key, ':q_') === 0 && $key !== ':q_id') ? PDO::PARAM_STR : PDO::PARAM_INT;
     $stmt->bindValue($key, $value, $param_type);
 }
 $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
@@ -450,14 +455,14 @@ $creators = $stmt->fetchAll();
             </div>
 
             <div class="filter-item filter-item-wide">
-                <label for="q">人物名検索</label>
+                <label for="q">人物名・ID検索</label>
                 <input
                     type="text"
                     id="q"
                     name="q"
                     class="search-input-wide"
                     value="<?= h($q) ?>"
-                    placeholder="人物名・かな"
+                    placeholder="人物名・かな・ID"
                 >
             </div>
 
