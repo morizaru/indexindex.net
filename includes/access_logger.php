@@ -126,6 +126,11 @@ if (!function_exists('ii_access_log')) {
             return;
         }
 
+        if (ii_access_is_distributed_work_behavior_bot($pdo, $pathOnly, $queryString, $referrer)) {
+            ii_access_count_bot($pdo, $pathOnly, $ua, 'Behavior Bot / Distributed Work');
+            return;
+        }
+
         $statusCode = http_response_code();
         if (!$statusCode || $statusCode < 100) {
             $statusCode = null;
@@ -366,6 +371,83 @@ if (!function_exists('ii_access_log')) {
             // 公開ページを止めないため、行動パターン判定失敗は通常アクセスとして扱う
             return false;
         }
+    }
+
+    function ii_access_is_distributed_work_behavior_bot(PDO $pdo, string $path, string $queryString, ?string $referrer): bool {
+        if ($path !== '/indexindex/work.php') {
+            return false;
+        }
+
+        if (trim((string)$referrer) !== '') {
+            return false;
+        }
+
+        $workId = ii_access_extract_work_id($queryString);
+        if ($workId <= 0) {
+            return false;
+        }
+
+        try {
+            $stmt = $pdo->prepare("
+                SELECT
+                    COUNT(*) AS pv,
+                    COUNT(DISTINCT ip_hash) AS distinct_ip_count,
+                    COUNT(DISTINCT visitor_hash) AS distinct_visitor_count,
+                    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS empty_referrer_count,
+                    COUNT(DISTINCT user_agent) AS distinct_user_agent_count
+                FROM access_logs
+                WHERE access_time >= (NOW() - INTERVAL 60 MINUTE)
+                  AND path = :path
+                  AND is_bot = 0
+                  AND query_string REGEXP '(^|&)work_id=[0-9]+'
+                  AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(query_string, 'work_id=', -1), '&', 1) AS UNSIGNED) = :work_id
+            ");
+            $stmt->execute([
+                ':path' => $path,
+                ':work_id' => $workId,
+            ]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $pv = (int)($row['pv'] ?? 0);
+            if ($pv < 100) {
+                return false;
+            }
+
+            $distinctIpCount = (int)($row['distinct_ip_count'] ?? 0);
+            $distinctVisitorCount = (int)($row['distinct_visitor_count'] ?? 0);
+            $emptyReferrerCount = (int)($row['empty_referrer_count'] ?? 0);
+            $distinctUserAgentCount = (int)($row['distinct_user_agent_count'] ?? 0);
+
+            if ($distinctIpCount < ($pv * 0.8)) {
+                return false;
+            }
+
+            if ($distinctVisitorCount < ($pv * 0.8)) {
+                return false;
+            }
+
+            if ($emptyReferrerCount < ($pv * 0.8)) {
+                return false;
+            }
+
+            return $distinctUserAgentCount <= 5;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    function ii_access_extract_work_id(string $queryString): int {
+        if ($queryString === '') {
+            return 0;
+        }
+
+        parse_str($queryString, $params);
+        $workId = $params['work_id'] ?? 0;
+        if (is_array($workId)) {
+            $workId = reset($workId);
+        }
+
+        return is_numeric($workId) ? max(0, (int)$workId) : 0;
     }
 
     function ii_access_count_bot(PDO $pdo, string $path, string $ua, ?string $botName = null): void {

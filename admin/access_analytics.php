@@ -106,6 +106,7 @@ function ii_bot_display_name($botName): string {
         'Attack / SQL Injection' => 'Attack / SQL Injection',
         'Blocked IP Hash' => 'Blocked IP Hash',
         'Behavior Bot / Distributed' => 'Behavior Bot / Distributed',
+        'Behavior Bot / Distributed Work' => 'Behavior Bot / Distributed Work',
         'Googlebot' => 'Googlebot',
         'Bingbot' => 'Bingbot',
     ];
@@ -373,7 +374,7 @@ if ($hasBotTable) {
     $botNameRows = ii_fetch_all($pdo, "
         SELECT
             CASE
-                WHEN bot_name IN ('Attack / SQL Injection', 'Blocked IP Hash', 'Behavior Bot / Distributed', 'Googlebot', 'Bingbot')
+                WHEN bot_name IN ('Attack / SQL Injection', 'Blocked IP Hash', 'Behavior Bot / Distributed', 'Behavior Bot / Distributed Work', 'Googlebot', 'Bingbot')
                 THEN bot_name
                 ELSE 'その他'
             END AS bot_name,
@@ -382,7 +383,7 @@ if ($hasBotTable) {
         WHERE access_date BETWEEN :from_date AND :to_date
         GROUP BY
             CASE
-                WHEN bot_name IN ('Attack / SQL Injection', 'Blocked IP Hash', 'Behavior Bot / Distributed', 'Googlebot', 'Bingbot')
+                WHEN bot_name IN ('Attack / SQL Injection', 'Blocked IP Hash', 'Behavior Bot / Distributed', 'Behavior Bot / Distributed Work', 'Googlebot', 'Bingbot')
                 THEN bot_name
                 ELSE 'その他'
             END
@@ -421,6 +422,7 @@ if ($hasBotTable) {
             SUM(CASE WHEN bot_name = 'Attack / SQL Injection' THEN count ELSE 0 END) AS attack_count,
             SUM(CASE WHEN bot_name = 'Blocked IP Hash' THEN count ELSE 0 END) AS blocked_ip_count,
             SUM(CASE WHEN bot_name = 'Behavior Bot / Distributed' THEN count ELSE 0 END) AS behavior_count,
+            SUM(CASE WHEN bot_name = 'Behavior Bot / Distributed Work' THEN count ELSE 0 END) AS behavior_work_count,
             SUM(count) AS bot_total
         FROM access_bot_daily
         WHERE access_date >= (CURDATE() - INTERVAL 6 DAY)
@@ -433,7 +435,7 @@ if ($hasBotTable) {
         SELECT path, SUM(count) AS cnt
         FROM access_bot_daily
         WHERE access_date BETWEEN :from_date AND :to_date
-          AND bot_name = 'Behavior Bot / Distributed'
+          AND bot_name IN ('Behavior Bot / Distributed', 'Behavior Bot / Distributed Work')
         GROUP BY path
         ORDER BY cnt DESC
         LIMIT 50
@@ -507,6 +509,7 @@ foreach ($botNameRows as $row) {
 $attackBotCount = $botCountMap['Attack / SQL Injection'] ?? 0;
 $blockedIpBotCount = $botCountMap['Blocked IP Hash'] ?? 0;
 $behaviorBotCount = $botCountMap['Behavior Bot / Distributed'] ?? 0;
+$behaviorWorkBotCount = $botCountMap['Behavior Bot / Distributed Work'] ?? 0;
 $botTotalCount = (int)($botCount['cnt'] ?? 0);
 
 $distributedCandidateRows = ii_fetch_all($pdo, "
@@ -602,6 +605,7 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
             <div class="summary-box"><div class="label">Attack / SQL Injection</div><div class="num"><?= number_format($attackBotCount) ?></div><div class="small">SQL Injection対策で除外</div></div>
             <div class="summary-box"><div class="label">Blocked IP Hash</div><div class="num"><?= number_format($blockedIpBotCount) ?></div><div class="small">匿名IPハッシュ除外</div></div>
             <div class="summary-box"><div class="label">Behavior Bot / Distributed</div><div class="num"><?= number_format($behaviorBotCount) ?></div><div class="small">分散bot行動判定で除外</div></div>
+            <div class="summary-box"><div class="label">Behavior Bot / Distributed Work</div><div class="num"><?= number_format($behaviorWorkBotCount) ?></div><div class="small">作品ID単位の分散bot判定で除外</div></div>
         </div>
     </div>
 
@@ -627,7 +631,7 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
 
     <div class="grid2">
         <div class="card"><h2>対策bot内訳</h2><table><thead><tr><th>bot分類</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botProtectionRows as $row): ?><tr><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$botProtectionRows): ?><tr><td colspan="2">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">表示期間内の access_bot_daily を bot_name 別に集計します。</div></div>
-        <div class="card"><h2>Behavior Bot / Distributed ページ別</h2><table><thead><tr><th>ページ</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($behaviorBotPageRows as $row): ?><tr><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$behaviorBotPageRows): ?><tr><td colspan="2">データなし</td></tr><?php endif; ?></tbody></table><div class="small">分散bot判定に該当したページ別件数です。</div></div>
+        <div class="card"><h2>Behavior Bot / Distributed ページ別</h2><table><thead><tr><th>ページ</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($behaviorBotPageRows as $row): ?><tr><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$behaviorBotPageRows): ?><tr><td colspan="2">データなし</td></tr><?php endif; ?></tbody></table><div class="small">分散bot判定、作品ID単位の分散bot判定に該当したページ別件数です。</div></div>
     </div>
 
     <div class="grid2">
@@ -637,7 +641,7 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
 
     <div class="card"><h2>Other Bot User-Agent内訳</h2><?php if (!$hasBotUaTable): ?><p>User-Agent内訳テーブル未作成</p><?php else: ?><table><thead><tr><th>bot_name</th><th>User-Agent</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($botUaRows as $row): ?><tr><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="mono"><?= h($row['user_agent'] ?? '') ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$botUaRows): ?><tr><td colspan="3">データなし</td></tr><?php endif; ?></tbody></table><div class="small">表示期間内の <?= h(ii_bot_display_name($botUaName)) ?> を User-Agent 別に上位50件表示します。上部の選択欄で GPTBot / Amazonbot / Meta External Agent なども確認できます。</div><?php endif; ?></div>
 
-    <div class="card"><h2>直近のbot対策状況</h2><table><thead><tr><th>日付</th><th class="right">Attack / SQL Injection</th><th class="right">Blocked IP Hash</th><th class="right">Behavior Bot / Distributed</th><th class="right">bot合計</th></tr></thead><tbody><?php foreach ($recentBotProtectionRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="right"><?= number_format((int)$row['attack_count']) ?></td><td class="right"><?= number_format((int)$row['blocked_ip_count']) ?></td><td class="right"><?= number_format((int)$row['behavior_count']) ?></td><td class="right"><?= number_format((int)$row['bot_total']) ?></td></tr><?php endforeach; ?><?php if (!$recentBotProtectionRows): ?><tr><td colspan="5">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">直近7日間の対策系bot分類とbot合計です。</div></div>
+    <div class="card"><h2>直近のbot対策状況</h2><table><thead><tr><th>日付</th><th class="right">Attack / SQL Injection</th><th class="right">Blocked IP Hash</th><th class="right">Behavior Bot / Distributed</th><th class="right">Behavior Bot / Distributed Work</th><th class="right">bot合計</th></tr></thead><tbody><?php foreach ($recentBotProtectionRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="right"><?= number_format((int)$row['attack_count']) ?></td><td class="right"><?= number_format((int)$row['blocked_ip_count']) ?></td><td class="right"><?= number_format((int)$row['behavior_count']) ?></td><td class="right"><?= number_format((int)$row['behavior_work_count']) ?></td><td class="right"><?= number_format((int)$row['bot_total']) ?></td></tr><?php endforeach; ?><?php if (!$recentBotProtectionRows): ?><tr><td colspan="6">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">直近7日間の対策系bot分類とbot合計です。</div></div>
 
     <div class="card"><h2>直近7日 bot_name別内訳</h2><table><thead><tr><th>日付</th><th>bot_name</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($recentBotNameRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$recentBotNameRows): ?><tr><td colspan="3">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">直近7日間の access_bot_daily を日付・bot_name 別に表示します。</div></div>
 
