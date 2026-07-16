@@ -1,0 +1,105 @@
+INDEXINDEX 分散Botアクセス調査メモ
+
+1. 発生日時
+2026-07-16
+
+2. 対象作品
+- work_id=30230
+- 作品名：醜い愛でごめん
+
+3. 異常アクセス概要
+- 対象URL：/indexindex/work.php
+- PV：1,163
+- IP数：1,162
+- UU：1,162
+- session：1,163
+- User-Agent：3種類
+- referrerなし：1,130
+- Mac系User-Agentのみ：1,130PV / 1,129IP / 1,129UU / referrerなし1,130
+- IP別最大PV：約32
+
+4. Botと判断した理由
+- PV 1,163に対してIP数 1,162、UU 1,162、session 1,163で、ほぼ1PVごとに別IP・別訪問者として記録されている。
+- referrerなしが1,130件と非常に多い。
+- User-Agentが3種類に集中している。
+- Mac系User-Agentだけで1,130PV / 1,129IP / 1,129UUとなり、自然流入・通常閲覧としては不自然。
+- IP別最大PVは約32で、単一IPや単一IPブロックだけでは検知・遮断しにくい。
+- 作品ページ work_id=30230 に集中しているため、IP単位ではなく作品ID単位で見る必要がある。
+
+5. 実行した補正SQL
+本作業ではDBに対する補正SQLは実行していない。
+過去ログを補正する場合のSQL例は以下。
+
+-- 対象日の通常ログ確認
+SELECT
+    COUNT(*) AS pv,
+    COUNT(DISTINCT ip_hash) AS ip_count,
+    COUNT(DISTINCT visitor_hash) AS uu,
+    COUNT(DISTINCT visitor_session_id) AS session_count,
+    COUNT(DISTINCT user_agent) AS ua_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count
+FROM access_logs
+WHERE site_key = 'indexindex'
+  AND path = '/indexindex/work.php'
+  AND query_string REGEXP '(^|&)work_id=30230(&|$)'
+  AND access_time >= '2026-07-16 00:00:00'
+  AND access_time <  '2026-07-17 00:00:00'
+  AND is_bot = 0;
+
+-- access_bot_daily へ補正集計する場合の例
+INSERT INTO access_bot_daily (access_date, path, bot_name, count)
+SELECT
+    DATE(access_time) AS access_date,
+    path,
+    'Behavior Bot / Distributed Work' AS bot_name,
+    COUNT(*) AS count
+FROM access_logs
+WHERE site_key = 'indexindex'
+  AND path = '/indexindex/work.php'
+  AND query_string REGEXP '(^|&)work_id=30230(&|$)'
+  AND access_time >= '2026-07-16 00:00:00'
+  AND access_time <  '2026-07-17 00:00:00'
+  AND is_bot = 0
+GROUP BY DATE(access_time), path
+ON DUPLICATE KEY UPDATE
+    count = count + VALUES(count),
+    updated_at = CURRENT_TIMESTAMP;
+
+-- 通常ログ側から補正対象を除外する場合の例
+DELETE FROM access_logs
+WHERE site_key = 'indexindex'
+  AND path = '/indexindex/work.php'
+  AND query_string REGEXP '(^|&)work_id=30230(&|$)'
+  AND access_time >= '2026-07-16 00:00:00'
+  AND access_time <  '2026-07-17 00:00:00'
+  AND is_bot = 0;
+
+6. 実行後確認SQL
+-- bot集計側の確認
+SELECT access_date, path, bot_name, count
+FROM access_bot_daily
+WHERE access_date = '2026-07-16'
+  AND path = '/indexindex/work.php'
+  AND bot_name = 'Behavior Bot / Distributed Work';
+
+-- 通常ログ側に残っている対象アクセスの確認
+SELECT COUNT(*) AS remaining_normal_pv
+FROM access_logs
+WHERE site_key = 'indexindex'
+  AND path = '/indexindex/work.php'
+  AND query_string REGEXP '(^|&)work_id=30230(&|$)'
+  AND access_time >= '2026-07-16 00:00:00'
+  AND access_time <  '2026-07-17 00:00:00'
+  AND is_bot = 0;
+
+7. 今後追加する対策案
+- /indexindex/work.php を対象に、query_string の work_id 単位で直近60分の通常アクセスを集計する。
+- 同一work_idでPVが一定以上、IP数とvisitor数がPVに近く、referrer空が多く、User-Agent種類が少ない場合に分散Botと判定する。
+- 判定後のアクセスは access_logs に通常保存せず、access_bot_daily に bot_name = 'Behavior Bot / Distributed Work' として集計する。
+- admin/access_analytics.php で bot_name = 'Behavior Bot / Distributed Work' を表示し、直近発生件数を確認できるようにする。
+
+8. 注意点
+- IP単位ではなく作品ID単位で見る必要がある。
+- 通常ユーザー誤判定を避けるため条件は厳しめにする。
+- 初期条件は、直近60分 / PV >= 100 / distinct ip_hash >= PV * 0.8 / distinct visitor_hash >= PV * 0.8 / referrer空 >= PV * 0.8 / distinct user_agent <= 5 とする。
+- DBエラー時は公開ページを止めず、通常アクセスとして扱う。
