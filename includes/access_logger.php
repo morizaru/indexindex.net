@@ -259,7 +259,7 @@ if (!function_exists('ii_access_log')) {
         if ($ua === '') return false;
 
         return (bool)preg_match(
-            '/bot|crawl|spider|slurp|bingpreview|meta-externalagent|facebookexternalhit|facebot|line-poker|discordbot|twitterbot|google-inspectiontool|gptbot|amazonbot|claudebot|perplexitybot|applebot|ccbot|dataforseobot|petalbot|bytespider|semrushbot|ahrefsbot|mj12bot|dotbot|yandexbot/i',
+            '/bot|crawl|spider|slurp|bingpreview|meta-externalagent|facebookexternalhit|facebot|line-poker|discordbot|twitterbot|google-inspectiontool|gptbot|amazonbot|claudebot|perplexitybot|applebot|ccbot|dataforseobot|petalbot|bytespider|semrushbot|ahrefsbot|mj12bot|dotbot|yandexbot|oai-searchbot|chatgpt-user|duckduckbot|coccocbot|shapbot/i',
             $ua
         );
     }
@@ -518,6 +518,11 @@ if (!function_exists('ii_access_log')) {
         if (stripos($ua, 'Google-InspectionTool') !== false) return 'Google Inspection';
         if (stripos($ua, 'Bingbot') !== false) return 'Bingbot';
         if (stripos($ua, 'Slurp') !== false) return 'Yahoo Slurp';
+        if (stripos($ua, 'OAI-SearchBot') !== false) return 'OAI-SearchBot';
+        if (stripos($ua, 'ChatGPT-User') !== false) return 'ChatGPT-User';
+        if (stripos($ua, 'DuckDuckBot') !== false) return 'DuckDuckBot';
+        if (stripos($ua, 'coccocbot') !== false) return 'CocCocBot';
+        if (stripos($ua, 'ShapBot') !== false) return 'ShapBot';
         if (stripos($ua, 'GPTBot') !== false) return 'GPTBot';
         if (stripos($ua, 'Amazonbot') !== false) return 'Amazonbot';
         if (stripos($ua, 'ClaudeBot') !== false) return 'ClaudeBot';

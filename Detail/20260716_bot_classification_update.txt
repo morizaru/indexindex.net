@@ -1,0 +1,79 @@
+INDEXINDEX bot分類追加 作業記録
+
+1. 作業日時
+2026-07-16 16:29:18 +09:00
+
+2. 作業対象ファイル
+- indexindex/includes/access_logger.php
+
+3. 作業目的
+Other Bot にまとまっていた既知User-Agentを個別bot名へ分類し、管理画面のbot内訳を見やすくする。
+
+4. 調査した内容
+- ii_access_is_bot($ua) のUser-Agent bot判定キーワード
+- ii_access_detect_bot_name($ua) のbot_name個別分類順
+- 既存のGPTBot、Amazonbot、ClaudeBot、PerplexityBot、Applebot、Meta External Agent、Googlebot、Bingbot、SemrushBot、Bytespider、MJ12bot、DotBot、AhrefsBot、CCBot、DataForSeoBot、PetalBot、YandexBot分類
+- Behavior Bot / Distributed、Behavior Bot / Distributed Work、access_bot_daily、access_bot_user_agents_daily の既存処理に影響しない差し込み位置
+
+5. 判定・判断理由
+- OAI-SearchBot、DuckDuckBot、coccocbot、ShapBot は User-Agent に bot を含むため、汎用の Other Bot 判定より前に個別判定する必要がある。
+- ChatGPT-User は OpenAI系の既知User-Agentとして個別に見たい対象であり、ii_access_is_bot($ua) のキーワードにも明示追加した。
+- 既存分類を壊さないため、既存の判定条件は削除・変更せず、新規条件だけを追加した。
+
+6. 実施した変更内容
+- ii_access_is_bot($ua) の正規表現に以下を追加した。
+  - oai-searchbot
+  - chatgpt-user
+  - duckduckbot
+  - coccocbot
+  - shapbot
+- ii_access_detect_bot_name($ua) に以下の個別分類を追加した。
+  - OAI-SearchBot -> OAI-SearchBot
+  - ChatGPT-User -> ChatGPT-User
+  - DuckDuckBot -> DuckDuckBot
+  - coccocbot -> CocCocBot
+  - ShapBot -> ShapBot
+- 個別分類は汎用の bot / crawl / spider 判定より前に配置した。
+
+7. 実行したSQLがある場合はSQL
+なし。DB更新は実行していない。
+
+8. 確認に使ったSQLがある場合はSQL
+なし。今回の確認はコード差分と対象文字列の確認のみ。
+運用後の確認SQL例:
+
+SELECT access_date, bot_name, SUM(count) AS cnt
+FROM access_bot_daily
+WHERE bot_name IN ('OAI-SearchBot', 'ChatGPT-User', 'DuckDuckBot', 'CocCocBot', 'ShapBot')
+GROUP BY access_date, bot_name
+ORDER BY access_date DESC, cnt DESC;
+
+SELECT access_date, bot_name, user_agent, SUM(count) AS cnt
+FROM access_bot_user_agents_daily
+WHERE bot_name IN ('OAI-SearchBot', 'ChatGPT-User', 'DuckDuckBot', 'CocCocBot', 'ShapBot')
+GROUP BY access_date, bot_name, user_agent_hash, user_agent
+ORDER BY access_date DESC, cnt DESC;
+
+9. 確認結果
+- access_logger.php に5種類のUser-Agent判定キーワードが追加された。
+- access_logger.php に5種類のbot_name個別分類が追加された。
+- 汎用 Other Bot 判定より前に個別分類が配置されている。
+- 既存の主要bot分類は削除・変更していない。
+- この環境では php コマンドがPATHになく、php -l による構文チェックは実行できない可能性がある。
+
+10. 影響範囲
+- User-Agent bot判定
+- access_bot_daily の bot_name 集計
+- access_bot_user_agents_daily の bot_name 集計
+- 管理画面のOther Bot内訳で、今後は対象User-Agentが個別bot名として分離される
+
+11. 注意点
+- 過去に Other Bot として集計済みのデータは、このコード変更だけでは自動補正されない。
+- 過去分を補正する場合は、対象期間とUser-Agentを確認してから access_bot_daily / access_bot_user_agents_daily の補正方針を決める。
+- DB接続情報、パスワード、APIキー、Cookie値、個人情報は記録していない。
+- app/config.php の内容は記録していない。
+
+12. 今後の追加対応候補
+- 管理画面のbot表示名マップに、必要に応じて今回追加したbot_nameを明示追加する。
+- Other Botに残る上位User-Agentを定期的に確認し、既知botは個別分類へ追加する。
+- 過去日のOther Bot集計を補正するための安全なSQL手順を別途作成する。
