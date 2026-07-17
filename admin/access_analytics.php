@@ -529,6 +529,115 @@ $distributedCandidateRows = ii_fetch_all($pdo, "
     LIMIT 20
 ");
 
+$normalBotLikeUaRows = ii_fetch_all($pdo, "
+    SELECT
+        DATE(access_time) AS access_date,
+        user_agent,
+        COUNT(*) AS pv,
+        COUNT(DISTINCT ip_hash) AS ip_count,
+        COUNT(DISTINCT visitor_hash) AS uu,
+        COUNT(DISTINCT visitor_session_id) AS session_count,
+        SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+        MIN(access_time) AS first_access,
+        MAX(access_time) AS last_access
+    FROM access_logs
+    WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+      AND is_bot = 0
+      AND (
+        user_agent LIKE '%bot%'
+        OR user_agent LIKE '%crawl%'
+        OR user_agent LIKE '%spider%'
+        OR user_agent LIKE '%slurp%'
+        OR user_agent LIKE '%facebookexternalhit%'
+        OR user_agent LIKE '%meta-externalagent%'
+        OR user_agent LIKE '%ChatGPT-User%'
+        OR user_agent LIKE '%OAI-SearchBot%'
+        OR user_agent LIKE '%DuckDuckBot%'
+        OR user_agent LIKE '%coccocbot%'
+        OR user_agent LIKE '%ShapBot%'
+      )
+    GROUP BY DATE(access_time), user_agent
+    ORDER BY access_date DESC, pv DESC
+    LIMIT 100
+");
+
+$normalBehaviorCandidateRows = ii_fetch_all($pdo, "
+    SELECT
+        DATE(access_time) AS access_date,
+        path,
+        COUNT(*) AS pv,
+        COUNT(DISTINCT ip_hash) AS ip_count,
+        COUNT(DISTINCT visitor_hash) AS uu,
+        COUNT(DISTINCT visitor_session_id) AS session_count,
+        COUNT(DISTINCT user_agent) AS ua_count,
+        SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+        MIN(access_time) AS first_access,
+        MAX(access_time) AS last_access
+    FROM access_logs
+    WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+      AND is_bot = 0
+    GROUP BY DATE(access_time), path
+    HAVING pv >= 100
+       AND ip_count >= pv * 0.7
+       AND session_count >= pv * 0.7
+       AND uu >= pv * 0.7
+       AND no_referrer_count >= pv * 0.7
+       AND ua_count <= 10
+    ORDER BY access_date DESC, pv DESC
+    LIMIT 100
+");
+
+$normalWorkCandidateRows = ii_fetch_all($pdo, "
+    SELECT
+        DATE(access_time) AS access_date,
+        SUBSTRING_INDEX(SUBSTRING_INDEX(query_string, 'work_id=', -1), '&', 1) AS work_id,
+        path,
+        COUNT(*) AS pv,
+        COUNT(DISTINCT ip_hash) AS ip_count,
+        COUNT(DISTINCT visitor_hash) AS uu,
+        COUNT(DISTINCT visitor_session_id) AS session_count,
+        COUNT(DISTINCT user_agent) AS ua_count,
+        SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+        MIN(access_time) AS first_access,
+        MAX(access_time) AS last_access
+    FROM access_logs
+    WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+      AND is_bot = 0
+      AND path IN ('/indexindex/work.php', '/indexindex/work_graph.php')
+      AND query_string LIKE '%work_id=%'
+    GROUP BY DATE(access_time), work_id, path
+    HAVING pv >= 100
+       AND ip_count >= pv * 0.7
+       AND session_count >= pv * 0.7
+       AND uu >= pv * 0.7
+       AND no_referrer_count >= pv * 0.7
+       AND ua_count <= 10
+    ORDER BY access_date DESC, pv DESC
+    LIMIT 100
+");
+
+$normalNoReferrerRows = ii_fetch_all($pdo, "
+    SELECT
+        DATE(access_time) AS access_date,
+        path,
+        COUNT(*) AS pv,
+        SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+        COUNT(DISTINCT ip_hash) AS ip_count,
+        COUNT(DISTINCT visitor_hash) AS uu,
+        COUNT(DISTINCT visitor_session_id) AS session_count,
+        COUNT(DISTINCT user_agent) AS ua_count,
+        MIN(access_time) AS first_access,
+        MAX(access_time) AS last_access
+    FROM access_logs
+    WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+      AND is_bot = 0
+    GROUP BY DATE(access_time), path
+    HAVING pv >= 100
+       AND no_referrer_count >= pv * 0.8
+    ORDER BY access_date DESC, no_referrer_count DESC
+    LIMIT 100
+");
+
 $monthlyRows = ii_get_monthly_rows($pdo);
 
 $dailyLabels = array_column($dailyRows, 'access_date');
@@ -644,6 +753,14 @@ $sourceChartCounts = array_map('intval', array_column(array_slice($sourceRows, 0
     <div class="card"><h2>直近のbot対策状況</h2><table><thead><tr><th>日付</th><th class="right">Attack / SQL Injection</th><th class="right">Blocked IP Hash</th><th class="right">Behavior Bot / Distributed</th><th class="right">Behavior Bot / Distributed Work</th><th class="right">bot合計</th></tr></thead><tbody><?php foreach ($recentBotProtectionRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="right"><?= number_format((int)$row['attack_count']) ?></td><td class="right"><?= number_format((int)$row['blocked_ip_count']) ?></td><td class="right"><?= number_format((int)$row['behavior_count']) ?></td><td class="right"><?= number_format((int)$row['behavior_work_count']) ?></td><td class="right"><?= number_format((int)$row['bot_total']) ?></td></tr><?php endforeach; ?><?php if (!$recentBotProtectionRows): ?><tr><td colspan="6">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">直近7日間の対策系bot分類とbot合計です。</div></div>
 
     <div class="card"><h2>直近7日 bot_name別内訳</h2><table><thead><tr><th>日付</th><th>bot_name</th><th class="right">件数</th></tr></thead><tbody><?php foreach ($recentBotNameRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td><?= h(ii_bot_display_name($row['bot_name'] ?? '')) ?></td><td class="right"><?= number_format((int)$row['cnt']) ?></td></tr><?php endforeach; ?><?php if (!$recentBotNameRows): ?><tr><td colspan="3">データなし<?= $hasBotTable ? '' : '（access_bot_daily テーブルなし）' ?></td></tr><?php endif; ?></tbody></table><div class="small">直近7日間の access_bot_daily を日付・bot_name 別に表示します。</div></div>
+
+    <div class="card"><h2>Normal Log Bot-like User-Agent</h2><table><thead><tr><th>Date</th><th>User-Agent</th><th class="right">PV</th><th class="right">IP</th><th class="right">UU</th><th class="right">Session</th><th class="right">No ref</th><th>First</th><th>Last</th></tr></thead><tbody><?php foreach ($normalBotLikeUaRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="mono"><?= h($row['user_agent'] ?? '') ?></td><td class="right"><?= number_format((int)$row['pv']) ?></td><td class="right"><?= number_format((int)$row['ip_count']) ?></td><td class="right"><?= number_format((int)$row['uu']) ?></td><td class="right"><?= number_format((int)$row['session_count']) ?></td><td class="right"><?= number_format((int)$row['no_referrer_count']) ?></td><td class="mono"><?= h($row['first_access']) ?></td><td class="mono"><?= h($row['last_access']) ?></td></tr><?php endforeach; ?><?php if (!$normalBotLikeUaRows): ?><tr><td colspan="9">No data</td></tr><?php endif; ?></tbody></table><div class="small">Last 7 days, access_logs / is_bot = 0. Bot-like keywords remaining here should be checked before adding UPDATE rules.</div></div>
+
+    <div class="card"><h2>Normal Log Behavior Candidates</h2><table><thead><tr><th>Date</th><th>Path</th><th class="right">PV</th><th class="right">IP</th><th class="right">UU</th><th class="right">Session</th><th class="right">UA</th><th class="right">No ref</th><th class="right">No ref %</th><th>First</th><th>Last</th></tr></thead><tbody><?php foreach ($normalBehaviorCandidateRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['pv']) ?></td><td class="right"><?= number_format((int)$row['ip_count']) ?></td><td class="right"><?= number_format((int)$row['uu']) ?></td><td class="right"><?= number_format((int)$row['session_count']) ?></td><td class="right"><?= number_format((int)$row['ua_count']) ?></td><td class="right"><?= number_format((int)$row['no_referrer_count']) ?></td><td class="right"><?= h(ii_percentage($row['no_referrer_count'] ?? 0, $row['pv'] ?? 0)) ?></td><td class="mono"><?= h($row['first_access']) ?></td><td class="mono"><?= h($row['last_access']) ?></td></tr><?php endforeach; ?><?php if (!$normalBehaviorCandidateRows): ?><tr><td colspan="11">No data</td></tr><?php endif; ?></tbody></table><div class="small">Last 7 days. PV, IP, UU, session are close; UA is small; referrer is mostly empty.</div></div>
+
+    <div class="card"><h2>Normal Log Work ID Candidates</h2><table><thead><tr><th>Date</th><th>work_id</th><th>Path</th><th class="right">PV</th><th class="right">IP</th><th class="right">UU</th><th class="right">Session</th><th class="right">UA</th><th class="right">No ref</th><th class="right">No ref %</th><th>First</th><th>Last</th></tr></thead><tbody><?php foreach ($normalWorkCandidateRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="mono"><?= h($row['work_id']) ?></td><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['pv']) ?></td><td class="right"><?= number_format((int)$row['ip_count']) ?></td><td class="right"><?= number_format((int)$row['uu']) ?></td><td class="right"><?= number_format((int)$row['session_count']) ?></td><td class="right"><?= number_format((int)$row['ua_count']) ?></td><td class="right"><?= number_format((int)$row['no_referrer_count']) ?></td><td class="right"><?= h(ii_percentage($row['no_referrer_count'] ?? 0, $row['pv'] ?? 0)) ?></td><td class="mono"><?= h($row['first_access']) ?></td><td class="mono"><?= h($row['last_access']) ?></td></tr><?php endforeach; ?><?php if (!$normalWorkCandidateRows): ?><tr><td colspan="12">No data</td></tr><?php endif; ?></tbody></table><div class="small">Last 7 days, /indexindex/work.php and /indexindex/work_graph.php by work_id. Use this before ranking correction.</div></div>
+
+    <div class="card"><h2>Normal Log No-referrer Spike</h2><table><thead><tr><th>Date</th><th>Path</th><th class="right">PV</th><th class="right">No ref</th><th class="right">No ref %</th><th class="right">IP</th><th class="right">UU</th><th class="right">Session</th><th class="right">UA</th><th>First</th><th>Last</th></tr></thead><tbody><?php foreach ($normalNoReferrerRows as $row): ?><tr><td><?= h($row['access_date']) ?></td><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['pv']) ?></td><td class="right"><?= number_format((int)$row['no_referrer_count']) ?></td><td class="right"><?= h(ii_percentage($row['no_referrer_count'] ?? 0, $row['pv'] ?? 0)) ?></td><td class="right"><?= number_format((int)$row['ip_count']) ?></td><td class="right"><?= number_format((int)$row['uu']) ?></td><td class="right"><?= number_format((int)$row['session_count']) ?></td><td class="right"><?= number_format((int)$row['ua_count']) ?></td><td class="mono"><?= h($row['first_access']) ?></td><td class="mono"><?= h($row['last_access']) ?></td></tr><?php endforeach; ?><?php if (!$normalNoReferrerRows): ?><tr><td colspan="11">No data</td></tr><?php endif; ?></tbody></table><div class="small">Last 7 days, access_logs / is_bot = 0, PV >= 100 and no-referrer ratio >= 80%.</div></div>
 
     <div class="card"><h2>通常ログ側 分散bot候補</h2><table><thead><tr><th>ページ</th><th class="right">PV</th><th class="right">IP数</th><th class="right">訪問者数</th><th class="right">セッション数</th><th class="right">UA数</th><th class="right">referrer空</th><th class="right">referrer空率</th></tr></thead><tbody><?php foreach ($distributedCandidateRows as $row): ?><tr><td class="mono"><?= h($row['path']) ?></td><td class="right"><?= number_format((int)$row['pv']) ?></td><td class="right"><?= number_format((int)$row['ip_count']) ?></td><td class="right"><?= number_format((int)$row['visitor_count']) ?></td><td class="right"><?= number_format((int)$row['session_count']) ?></td><td class="right"><?= number_format((int)$row['ua_count']) ?></td><td class="right"><?= number_format((int)$row['no_referrer_count']) ?></td><td class="right"><?= h(ii_percentage($row['no_referrer_count'] ?? 0, $row['pv'] ?? 0)) ?></td></tr><?php endforeach; ?><?php if (!$distributedCandidateRows): ?><tr><td colspan="8">データなし</td></tr><?php endif; ?></tbody></table><div class="small">今日の通常ログ（is_bot = 0）に残っている高PVページを表示します。/indexindex/work_graph.php のPV・IP数・セッション数・referrer空率が高い場合は、Behavior Bot / Distributed の判定条件見直し候補です。</div></div>
 

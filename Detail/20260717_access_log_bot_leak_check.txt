@@ -1,0 +1,206 @@
+作業日時
+2026-07-17
+
+対象ファイル
+- indexindex/admin/access_analytics.php
+- indexindex/includes/access_logger.php
+
+目的
+直近7日間の access_logs / is_bot = 0 に Bot 判定漏れが混ざっていないか確認し、通常アクセス側の異常候補を管理画面で確認しやすくする。
+
+調査SQL
+1. 日別の通常アクセス
+SELECT
+    DATE(access_time) AS access_date,
+    COUNT(*) AS normal_pv,
+    COUNT(DISTINCT visitor_hash) AS normal_uu,
+    COUNT(DISTINCT ip_hash) AS ip_count,
+    COUNT(DISTINCT user_agent) AS ua_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count
+FROM access_logs
+WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+  AND is_bot = 0
+GROUP BY DATE(access_time)
+ORDER BY access_date DESC;
+
+2. 日別の bot アクセス
+SELECT
+    access_date,
+    SUM(count) AS bot_count
+FROM access_bot_daily
+WHERE access_date >= CURDATE() - INTERVAL 6 DAY
+GROUP BY access_date
+ORDER BY access_date DESC;
+
+3. 通常アクセス側の Bot 風 User-Agent
+SELECT
+    DATE(access_time) AS access_date,
+    user_agent,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT ip_hash) AS ip_count,
+    COUNT(DISTINCT visitor_hash) AS uu,
+    COUNT(DISTINCT visitor_session_id) AS session_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+    MIN(access_time) AS first_access,
+    MAX(access_time) AS last_access
+FROM access_logs
+WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+  AND is_bot = 0
+  AND (
+    user_agent LIKE '%bot%'
+    OR user_agent LIKE '%crawl%'
+    OR user_agent LIKE '%spider%'
+    OR user_agent LIKE '%slurp%'
+    OR user_agent LIKE '%facebookexternalhit%'
+    OR user_agent LIKE '%meta-externalagent%'
+    OR user_agent LIKE '%ChatGPT-User%'
+    OR user_agent LIKE '%OAI-SearchBot%'
+    OR user_agent LIKE '%DuckDuckBot%'
+    OR user_agent LIKE '%coccocbot%'
+    OR user_agent LIKE '%ShapBot%'
+  )
+GROUP BY DATE(access_time), user_agent
+ORDER BY access_date DESC, pv DESC
+LIMIT 100;
+
+4. 通常アクセス側の分散 Bot 候補
+SELECT
+    DATE(access_time) AS access_date,
+    path,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT ip_hash) AS ip_count,
+    COUNT(DISTINCT visitor_hash) AS uu,
+    COUNT(DISTINCT visitor_session_id) AS session_count,
+    COUNT(DISTINCT user_agent) AS ua_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+    MIN(access_time) AS first_access,
+    MAX(access_time) AS last_access
+FROM access_logs
+WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+  AND is_bot = 0
+GROUP BY DATE(access_time), path
+HAVING pv >= 100
+ORDER BY access_date DESC, pv DESC;
+
+5. work_id 単位の異常候補
+SELECT
+    DATE(access_time) AS access_date,
+    SUBSTRING_INDEX(SUBSTRING_INDEX(query_string, 'work_id=', -1), '&', 1) AS work_id,
+    path,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT ip_hash) AS ip_count,
+    COUNT(DISTINCT visitor_hash) AS uu,
+    COUNT(DISTINCT visitor_session_id) AS session_count,
+    COUNT(DISTINCT user_agent) AS ua_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+    MIN(access_time) AS first_access,
+    MAX(access_time) AS last_access
+FROM access_logs
+WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+  AND is_bot = 0
+  AND path IN ('/indexindex/work.php', '/indexindex/work_graph.php')
+  AND query_string LIKE '%work_id=%'
+GROUP BY DATE(access_time), work_id, path
+HAVING pv >= 100
+ORDER BY access_date DESC, pv DESC
+LIMIT 100;
+
+調査結果
+- このローカル環境では PHP が PATH に無く、indexindex/app/config.php も未配置だった。
+- mysql.exe は存在したが、外部 DB ホストへの接続はタイムアウトした。
+- 通常権限、外部接続許可つきの両方で接続できなかったため、直近7日間の実データ件数は未取得。
+- includes/access_logger.php の ii_access_is_bot() には、bot / crawl / spider / slurp / meta-externalagent / facebookexternalhit / ChatGPT-User / OAI-SearchBot / DuckDuckBot / coccocbot / ShapBot など、確認対象の主要パターンは既に含まれていた。
+- 実データで漏れを確認できていないため、includes/access_logger.php の Bot 判定追加や過去ログ UPDATE は実施していない。
+
+変更内容
+- indexindex/admin/access_analytics.php に、直近7日間の通常ログ内 Bot 疑い確認用の取得SQLと表示テーブルを追加。
+- 追加セクション:
+  - Normal Log Bot-like User-Agent
+  - Normal Log Behavior Candidates
+  - Normal Log Work ID Candidates
+  - Normal Log No-referrer Spike
+- 既存の通常アクセス集計、botアクセス集計、access_bot_daily、access_bot_user_agents_daily、Behavior Bot / Distributed、Behavior Bot / Distributed Work の既存処理は変更していない。
+
+補正SQL
+実データ確認ができていないため未実行。実行する場合は、まず SELECT で対象件数とサンプルを確認する。
+
+Bot 風 User-Agent の件数確認例:
+SELECT
+    COUNT(*) AS target_count,
+    MIN(access_time) AS first_access,
+    MAX(access_time) AS last_access
+FROM access_logs
+WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+  AND is_bot = 0
+  AND path IN ('/indexindex/work.php', '/indexindex/work_graph.php')
+  AND (
+    user_agent LIKE '%bot%'
+    OR user_agent LIKE '%crawl%'
+    OR user_agent LIKE '%spider%'
+    OR user_agent LIKE '%slurp%'
+    OR user_agent LIKE '%facebookexternalhit%'
+    OR user_agent LIKE '%meta-externalagent%'
+    OR user_agent LIKE '%ChatGPT-User%'
+    OR user_agent LIKE '%OAI-SearchBot%'
+    OR user_agent LIKE '%DuckDuckBot%'
+    OR user_agent LIKE '%coccocbot%'
+    OR user_agent LIKE '%ShapBot%'
+  );
+
+対象確認後の補正例:
+UPDATE access_logs
+SET is_bot = 1
+WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+  AND is_bot = 0
+  AND path IN ('/indexindex/work.php', '/indexindex/work_graph.php')
+  AND (
+    user_agent LIKE '%bot%'
+    OR user_agent LIKE '%crawl%'
+    OR user_agent LIKE '%spider%'
+    OR user_agent LIKE '%slurp%'
+    OR user_agent LIKE '%facebookexternalhit%'
+    OR user_agent LIKE '%meta-externalagent%'
+    OR user_agent LIKE '%ChatGPT-User%'
+    OR user_agent LIKE '%OAI-SearchBot%'
+    OR user_agent LIKE '%DuckDuckBot%'
+    OR user_agent LIKE '%coccocbot%'
+    OR user_agent LIKE '%ShapBot%'
+  );
+
+work_id 単位の補正は、管理画面の Normal Log Work ID Candidates で work_id、path、日付、UA数、referrer空率を確認してから、日付と work_id を限定して実行する。
+
+確認SQL
+補正前:
+SELECT is_bot, COUNT(*) AS cnt
+FROM access_logs
+WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+  AND path IN ('/indexindex/work.php', '/indexindex/work_graph.php')
+GROUP BY is_bot;
+
+補正後:
+SELECT
+    DATE(access_time) AS access_date,
+    path,
+    COUNT(*) AS normal_pv
+FROM access_logs
+WHERE access_time >= CURDATE() - INTERVAL 6 DAY
+  AND is_bot = 0
+GROUP BY DATE(access_time), path
+ORDER BY access_date DESC, normal_pv DESC;
+
+確認結果
+- DB実データ確認は未完了。
+- PHP lint もローカル PHP 実行ファイルが見つからず未実施。
+- git diff で admin/access_analytics.php の追加差分を確認した。
+
+注意点
+- DELETE は使わず、過去ログ補正は is_bot = 1 への UPDATE のみにする。
+- UPDATE 前に必ず SELECT で件数、期間、path、work_id、User-Agent、first_access、last_access を確認する。
+- 通常ユーザーを巻き込まないため、広い User-Agent 条件だけで一括補正せず、path や work_id、日付を限定する。
+- access_bot_daily は日別集計テーブルのため、過去の access_logs を is_bot = 1 に補正しても、bot日別集計へ自動加算されるわけではない点に注意する。
+
+今後の対応候補
+- デプロイ先またはDB接続可能な環境で、追加した管理画面セクションを確認する。
+- Normal Log Bot-like User-Agent に明確な漏れがあれば、ii_access_is_bot() と ii_access_detect_bot_name() に該当パターンを追加する。
+- Normal Log Behavior Candidates または Work ID Candidates に大量候補が出る場合は、Behavior Bot / Distributed と Behavior Bot / Distributed Work の閾値を実データに合わせて見直す。
+- work_id 単位のランキング汚染が確認された場合のみ、日付・path・work_id を限定して is_bot = 1 補正を行う。
