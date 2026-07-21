@@ -15,6 +15,7 @@ $page_title = 'データ登録方針';
 $page_description = 'INDEXINDEXの漫画雑誌目次データ登録方針。雑誌号、作品名、作者名、掲載順、開始ページ、発売日、読切や新連載などの扱いを説明します。';
 $canonical_url = 'https://morizaru.net/indexindex/data_policy.php';
 $current_page = 'data_policy';
+$site_header_width = 'narrow';
 ?>
 <!DOCTYPE html>
 <html lang="ja">

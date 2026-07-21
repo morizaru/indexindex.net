@@ -15,6 +15,7 @@ $page_title = 'INDEXINDEXの使い方';
 $page_description = '漫画雑誌目次データベース INDEXINDEX の使い方。雑誌号、作品名、作者・関係者、掲載順グラフから目的の情報を探す方法と検索のコツを説明します。';
 $canonical_url = 'https://morizaru.net/indexindex/how_to_use.php';
 $current_page = 'how_to_use';
+$site_header_width = 'narrow';
 ?>
 <!DOCTYPE html>
 <html lang="ja">
