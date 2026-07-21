@@ -1,0 +1,116 @@
+2026-07-21 INDEXINDEX Other Bot 個別分類追加
+
+作業日時
+--------
+2026-07-21
+
+対象ファイル
+------------
+- indexindex/includes/access_logger.php
+
+目的
+----
+直近1週間の「Other Bot User-Agent内訳」で Other Bot に分類されていた既知Botを、個別の bot_name として集計できるようにする。
+admin/access_analytics.php のBot集計で、SERankingBacklinksBot、OAI-SearchBot、ChatGPT-User、DuckDuckBot などの実体が見やすくなることを目的とした。
+
+変更内容
+--------
+1. ii_access_is_bot($ua) のBot判定キーワードを追加した。
+   汎用の bot / crawl / spider 判定より前に、今回追加する個別Botのキーワードを配置した。
+
+2. ii_access_detect_bot_name($ua) に個別分類を追加した。
+   bot 文字列を含むUser-Agentが Other Bot に落ちないよう、汎用判定より前で分類するようにした。
+
+3. 既存分類は維持した。
+   Googlebot、Bingbot、GPTBot、Amazonbot、ClaudeBot、PerplexityBot、Applebot、Meta External Agent、Facebook、Facebot、CCBot、DataForSeoBot、PetalBot、Bytespider、SemrushBot、AhrefsBot、MJ12bot、DotBot、YandexBot などの既存判定は残している。
+
+追加したBot判定キーワード
+-------------------------
+- serankingbacklinksbot
+- oai-searchbot
+- chatgpt-user
+- trendictionbot
+- yak/
+- linkfluence
+- duckduckbot
+- queritbot
+- google-display-ads-bot
+- coccocbot
+- shapbot
+- duckassistbot
+- bilateralnavigator
+- sleepbot
+
+追加したBot分類
+---------------
+- SERankingBacklinksBot -> bot_name = 'SERankingBacklinksBot'
+- OAI-SearchBot -> bot_name = 'OAI-SearchBot'
+- ChatGPT-User -> bot_name = 'ChatGPT-User'
+- trendictionbot -> bot_name = 'trendictionbot'
+- YaK または linkfluence -> bot_name = 'Linkfluence YaK'
+- DuckDuckBot -> bot_name = 'DuckDuckBot'
+- QueritBot -> bot_name = 'QueritBot'
+- Google-Display-Ads-Bot -> bot_name = 'Google Display Ads Bot'
+- coccocbot -> bot_name = 'CocCocBot'
+- ShapBot -> bot_name = 'ShapBot'
+- DuckAssistBot -> bot_name = 'DuckAssistBot'
+- BilateralNavigator -> bot_name = 'BilateralNavigator'
+- SleepBot -> bot_name = 'SleepBot'
+
+確認SQL
+-------
+Bot日別集計確認:
+
+SELECT
+    access_date,
+    bot_name,
+    SUM(count) AS cnt
+FROM access_bot_daily
+WHERE access_date = CURDATE()
+GROUP BY access_date, bot_name
+ORDER BY cnt DESC;
+
+Other Bot のUser-Agent内訳確認:
+
+SELECT
+    bot_name,
+    user_agent,
+    SUM(count) AS cnt
+FROM access_bot_user_agents_daily
+WHERE access_date = CURDATE()
+  AND bot_name = 'Other Bot'
+GROUP BY bot_name, user_agent
+ORDER BY cnt DESC
+LIMIT 50;
+
+確認方法
+--------
+以下のUser-Agentが Other Bot ではなく、個別の bot_name として access_bot_daily / access_bot_user_agents_daily に集計されることを確認する。
+
+- SERankingBacklinksBot -> SERankingBacklinksBot
+- OAI-SearchBot -> OAI-SearchBot
+- ChatGPT-User -> ChatGPT-User
+- DuckDuckBot -> DuckDuckBot
+- QueritBot -> QueritBot
+- Google-Display-Ads-Bot -> Google Display Ads Bot
+- trendictionbot -> trendictionbot
+- YaK/1.0 または linkfluence -> Linkfluence YaK
+- coccocbot -> CocCocBot
+- ShapBot -> ShapBot
+- DuckAssistBot -> DuckAssistBot
+- BilateralNavigator -> BilateralNavigator
+- SleepBot -> SleepBot
+
+注意点
+------
+- YaK/1.0 は User-Agent に bot 文字列を含まない可能性があるため、yak/ または linkfluence でBot判定する。
+- 今回の変更は User-Agent 文字列による分類追加のみ。
+- SQL Injection判定、Blocked IP Hash判定、Behavior Bot / Distributed判定、Behavior Bot / Distributed Work判定、access_bot_daily集計、access_bot_user_agents_daily集計、通常アクセスの access_logs 保存処理は変更していない。
+- この環境では php コマンドが PATH に存在しなかったため、php -l による構文チェックは実行できなかった。
+
+今後の対応候補
+--------------
+- Other Bot の内訳を定期的に確認し、件数の多い既知Botから個別分類を追加する。
+- bot_name の分類が増えてきた場合は、判定ルールを配列化して保守しやすくする。
+- 管理画面で「新規に増えたOther Bot User-Agent」を見つけやすい表示を追加する。
+
