@@ -3,7 +3,7 @@ if (!isset($current_page)) {
     $current_page = '';
 }
 
-$nav_items = [
+$primary_nav_items = [
     'issues' => ['label' => '雑誌', 'url' => 'issues.php'],
     'works' => ['label' => '作品', 'url' => 'works.php'],
     'creators' => ['label' => '人物', 'url' => 'creators.php'],
@@ -12,6 +12,9 @@ $nav_items = [
     'mediamix' => ['label' => 'メディアミックス', 'url' => 'mediamix.php'],
     'ranking' => ['label' => 'ランキング', 'url' => 'ranking.php'],
     'recent_updates' => ['label' => '最近の更新', 'url' => 'recent_updates.php'],
+];
+
+$secondary_nav_items = [
     'about' => ['label' => 'INDEXINDEXについて', 'url' => 'about.php'],
     'how_to_use' => ['label' => '使い方', 'url' => 'how_to_use.php'],
     'data_policy' => ['label' => '登録方針', 'url' => 'data_policy.php'],
@@ -66,6 +69,17 @@ $nav_items = [
     flex-wrap: wrap;
 }
 
+.site-header-navs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.site-header-nav-secondary {
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+}
+
 .site-header-nav a,
 .site-header-nav span {
     font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -107,6 +121,10 @@ $nav_items = [
         padding: 6px 10px;
         font-size: 13px;
     }
+
+    .site-header-navs {
+        width: 100%;
+    }
 }
 </style>
 
@@ -115,15 +133,29 @@ $nav_items = [
         <img src="assets/images/main_title0.png" alt="INDEXINDEX" width="220">
     </a>
 
-    <nav class="site-header-nav" aria-label="メインメニュー">
-        <?php foreach ($nav_items as $key => $item): ?>
-            <?php if ($current_page === $key): ?>
-                <span class="is-current"><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
-            <?php else: ?>
-                <a href="<?= htmlspecialchars($item['url'], ENT_QUOTES, 'UTF-8') ?>">
-                    <?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?>
-                </a>
-            <?php endif; ?>
-        <?php endforeach; ?>
-    </nav>
+    <div class="site-header-navs">
+        <nav class="site-header-nav" aria-label="メインメニュー">
+            <?php foreach ($primary_nav_items as $key => $item): ?>
+                <?php if ($current_page === $key): ?>
+                    <span class="is-current"><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+                <?php else: ?>
+                    <a href="<?= htmlspecialchars($item['url'], ENT_QUOTES, 'UTF-8') ?>">
+                        <?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?>
+                    </a>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </nav>
+
+        <nav class="site-header-nav site-header-nav-secondary" aria-label="INDEXINDEX説明メニュー">
+            <?php foreach ($secondary_nav_items as $key => $item): ?>
+                <?php if ($current_page === $key): ?>
+                    <span class="is-current"><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+                <?php else: ?>
+                    <a href="<?= htmlspecialchars($item['url'], ENT_QUOTES, 'UTF-8') ?>">
+                        <?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?>
+                    </a>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </nav>
+    </div>
 </header>
