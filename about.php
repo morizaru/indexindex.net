@@ -4,21 +4,26 @@
 header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/includes/access_logger.php';
-ii_access_log('運営者情報');
+ii_access_log('INDEXINDEXについて');
 
 function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
 $site_name = 'INDEXINDEX';
-$site_url  = 'https://morizaru.net/indexindex/';
-$contact_url = 'contact.php';
+$page_title = 'INDEXINDEXについて';
+$page_description = 'INDEXINDEXは漫画雑誌の目次、掲載順、開始ページ、作者・関係者情報を整理して公開する資料サイトです。作成目的、収録情報、調査に使える内容を説明します。';
+$canonical_url = 'https://morizaru.net/indexindex/about.php';
+$current_page = 'about';
 ?>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>運営者情報 - <?= h($site_name) ?></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= h($page_title) ?> - <?= h($site_name) ?></title>
+    <meta name="description" content="<?= h($page_description) ?>">
+    <link rel="canonical" href="<?= h($canonical_url) ?>">
 
     <?php include __DIR__ . '/includes/adsense_head.php'; ?>
 
@@ -32,9 +37,10 @@ $contact_url = 'contact.php';
         }
 
         .container {
-            max-width: 900px;
+            max-width: 940px;
             margin: 0 auto;
             padding: 24px;
+            box-sizing: border-box;
         }
 
         .box {
@@ -42,71 +48,56 @@ $contact_url = 'contact.php';
             border: 1px solid #ddd;
             border-radius: 12px;
             padding: 28px;
+            box-sizing: border-box;
         }
 
         h1 {
+            margin: 0 0 18px;
             font-size: 28px;
-            margin-top: 0;
-            margin-bottom: 20px;
+            line-height: 1.35;
         }
 
         h2 {
-            font-size: 20px;
-            margin-top: 32px;
-            margin-bottom: 12px;
-            border-left: 5px solid #333;
+            margin: 32px 0 12px;
             padding-left: 10px;
+            border-left: 5px solid #333;
+            font-size: 20px;
+            line-height: 1.45;
         }
 
         p {
             margin: 0 0 14px;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 12px;
-            background: #fff;
+        ul {
+            margin: 0 0 14px;
+            padding-left: 1.4em;
         }
 
-        th,
-        td {
-            border: 1px solid #ddd;
+        li {
+            margin-bottom: 6px;
+        }
+
+        .link-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .link-list a {
+            display: block;
             padding: 12px 14px;
-            text-align: left;
-            vertical-align: top;
-        }
-
-        th {
-            width: 180px;
-            background: #f8f8f8;
-            font-weight: bold;
-        }
-
-        a {
-            color: #0066cc;
-        }
-
-        .note {
-            color: #666;
-            font-size: 14px;
-        }
-
-        .footer {
-            margin-top: 28px;
-            text-align: center;
-            color: #888;
-            font-size: 13px;
-        }
-
-        .footer a {
-            color: #666;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            color: #222;
             text-decoration: none;
-            margin: 0 6px;
+            background: #fafafa;
         }
 
-        .footer a:hover {
-            text-decoration: underline;
+        .link-list a:hover {
+            border-color: #999;
+            background: #f1f3f5;
         }
 
         @media (max-width: 700px) {
@@ -126,132 +117,51 @@ $contact_url = 'contact.php';
             h2 {
                 font-size: 18px;
             }
-
-            table,
-            tbody,
-            tr,
-            th,
-            td {
-                display: block;
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            th {
-                border-bottom: none;
-            }
-
-            td {
-                border-top: none;
-                margin-bottom: 10px;
-            }
         }
     </style>
 </head>
 <body>
 
-<div class="container">
+<?php require_once __DIR__ . '/includes/header.php'; ?>
 
-    <div class="box">
-        <h1>運営者情報</h1>
+<main class="container">
+    <article class="box">
+        <h1>INDEXINDEXについて</h1>
 
         <p>
-            <?= h($site_name) ?>は、漫画雑誌の目次・掲載順・人物・作品情報を整理し、
-            閲覧しやすくすることを目的としたデータベースサイトです。
+            INDEXINDEXは、漫画雑誌の目次情報を号ごとに整理し、作品名、作者・関係者名、掲載順、開始ページ、発売日などを横断して確認できるようにする資料サイトです。単にデータを並べるだけではなく、雑誌のどの号に何が掲載されていたのか、作品がどの時期にどのような位置で扱われていたのかを、あとから調べやすい形に整えることを目的に運営しています。
         </p>
 
-        <h2>サイト情報</h2>
+        <h2>作っている目的</h2>
+        <p>
+            漫画雑誌は、作品単行本や電子書籍とは別に、その時代の編集方針、読切の登場、連載開始、最終回、出張掲載、企画ページなどを記録している一次的な手がかりです。しかし、過去の号の目次をまとめて確認できる場所は限られており、作品名だけでは探しにくい情報も少なくありません。INDEXINDEXでは、雑誌号を起点にした目次情報を蓄積し、漫画史、作品研究、作者の掲載歴確認、古書購入時の確認などに使える索引を目指しています。
+        </p>
 
-        <table>
-            <tr>
-                <th>サイト名</th>
-                <td><?= h($site_name) ?></td>
-            </tr>
-            <tr>
-                <th>URL</th>
-                <td>
-                    <a href="<?= h($site_url) ?>">
-                        <?= h($site_url) ?>
-                    </a>
-                </td>
-            </tr>
-            <tr>
-                <th>運営者</th>
-                <td><?= h($site_name) ?>運営</td>
-            </tr>
-            <tr>
-                <th>サイト内容</th>
-                <td>
-                    漫画雑誌の目次、掲載順、作品情報、人物情報などを整理・公開するデータベースサイトです。
-                </td>
-            </tr>
-            <tr>
-                <th>お問い合わせ</th>
-                <td>
-                    <a href="<?= h($contact_url) ?>">お問い合わせページ</a>よりお願いいたします。
-                </td>
-            </tr>
-        </table>
+        <h2>収録している情報</h2>
+        <p>
+            主に、雑誌名、出版社、号数、発行年、発売日、掲載作品名、作者名、原作者名、作画担当者名、掲載順、開始ページ、連載・読切などの区分を扱います。目次上で確認できる表記を尊重しつつ、検索しやすいように作品ページ、人物ページ、雑誌号ページを相互に結びます。登録状況は号によって差があり、すべての項目が必ず揃っているとは限りませんが、確認できた情報から順に整理しています。
+        </p>
+
+        <h2>調査に使えること</h2>
+        <p>
+            雑誌号から当時の掲載作品を確認する、作品名から掲載された号を追う、作者や関係者から参加作品を探す、掲載順グラフで作品の位置の変化を見る、といった使い方ができます。たとえば、ある読切が後の連載とどう関係しているかを調べたり、特定の作者が複数の雑誌でどの時期に活動していたかを確認したり、古い雑誌を入手する前に目次の見当をつけたりできます。
+        </p>
 
         <h2>掲載内容について</h2>
-
         <p>
-            当サイトでは、漫画雑誌の目次情報、作品情報、人物情報などを整理して掲載しています。
-            掲載内容については、できる限り正確な情報となるよう努めていますが、
-            正確性・完全性を保証するものではありません。
+            データは確認できる範囲で丁寧に登録していますが、雑誌や資料の状態、表記ゆれ、発売日と発行日の違いなどにより、誤記や未確認の項目が残る場合があります。修正依頼や補足情報は、お問い合わせページから該当ページのURL、雑誌名、号数、作品名などを添えてお知らせください。確認できた内容から順次反映します。
         </p>
 
-        <p>
-            内容に誤りや修正希望がある場合は、お問い合わせページよりご連絡ください。
-            確認のうえ、必要に応じて修正いたします。
-        </p>
+        <div class="link-list" aria-label="関連ページ">
+            <a href="how_to_use.php">使い方を見る</a>
+            <a href="data_policy.php">データ登録方針を見る</a>
+            <a href="terms.php">用語説明を見る</a>
+            <a href="contact.php">修正依頼・お問い合わせ</a>
+        </div>
+    </article>
+</main>
 
-        <h2>著作権について</h2>
-
-        <p>
-            当サイトに掲載している文章、画像、データ等の著作権は、
-            当サイトまたは各権利所有者に帰属します。
-        </p>
-
-        <p>
-            著作権法上認められている場合を除き、
-            無断転載・無断利用を禁止します。
-        </p>
-
-        <h2>免責事項</h2>
-
-        <p>
-            当サイトの情報を利用することで生じた損害等について、
-            当サイトでは責任を負いかねます。
-        </p>
-
-        <p>
-            また、当サイトからリンクしている外部サイトの内容についても、
-            当サイトでは責任を負いかねます。
-        </p>
-
-        <h2>関連ページ</h2>
-
-        <p>
-            <a href="privacy.php">プライバシーポリシー</a><br>
-            <a href="contact.php">お問い合わせ</a>
-        </p>
-
-        <p class="note">
-            最終更新日：2026年5月8日
-        </p>
-    </div>
-
-    <div class="footer">
-        <a href="index.php">トップページ</a> |
-        <a href="privacy.php">プライバシーポリシー</a> |
-        <a href="contact.php">お問い合わせ</a> |
-        <a href="about.php">運営者情報</a>
-        <br>
-        INDEXINDEX
-    </div>
-
-</div>
+<?php require_once __DIR__ . '/includes/footer.php'; ?>
 
 </body>
 </html>

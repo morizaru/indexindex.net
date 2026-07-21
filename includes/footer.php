@@ -37,9 +37,12 @@
 
 <div class="footer">
     <a href="index.php">トップページ</a> |
+    <a href="about.php">INDEXINDEXについて</a> |
+    <a href="how_to_use.php">使い方</a> |
+    <a href="data_policy.php">データ登録方針</a> |
+    <a href="terms.php">用語説明</a> |
     <a href="privacy.php">プライバシーポリシー</a> |
-    <a href="contact.php">お問い合わせ</a> |
-    <a href="about.php">運営者情報</a>
+    <a href="contact.php">お問い合わせ</a>
     <br>
     INDEXINDEX
 </div>

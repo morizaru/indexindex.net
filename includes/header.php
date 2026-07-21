@@ -12,6 +12,10 @@ $nav_items = [
     'mediamix' => ['label' => 'メディアミックス', 'url' => 'mediamix.php'],
     'ranking' => ['label' => 'ランキング', 'url' => 'ranking.php'],
     'recent_updates' => ['label' => '最近の更新', 'url' => 'recent_updates.php'],
+    'about' => ['label' => 'INDEXINDEXについて', 'url' => 'about.php'],
+    'how_to_use' => ['label' => '使い方', 'url' => 'how_to_use.php'],
+    'data_policy' => ['label' => '登録方針', 'url' => 'data_policy.php'],
+    'terms' => ['label' => '用語説明', 'url' => 'terms.php'],
 ];
 ?>
 

@@ -343,6 +343,26 @@ $menu_items = [
         'description' => '最近更新した雑誌号、人物、雑誌を表示します。',
         'url' => 'recent_updates.php',
     ],
+    [
+        'title' => 'INDEXINDEXについて',
+        'description' => '漫画雑誌目次データベースを作っている目的と、収録している情報を説明します。',
+        'url' => 'about.php',
+    ],
+    [
+        'title' => '使い方',
+        'description' => '雑誌号、作品名、作者・関係者、掲載順グラフから探す方法を説明します。',
+        'url' => 'how_to_use.php',
+    ],
+    [
+        'title' => 'データ登録方針',
+        'description' => '雑誌号、作品名、作者名、掲載順、発売日、読切や新連載などの扱いを説明します。',
+        'url' => 'data_policy.php',
+    ],
+    [
+        'title' => '用語説明',
+        'description' => '雑誌号、目次、掲載順、読切、出張掲載、原作、作画などの用語を説明します。',
+        'url' => 'terms.php',
+    ],
 ];
 ?>
 <!DOCTYPE html>
@@ -1040,9 +1060,12 @@ $menu_items = [
 
     <div class="footer">
         <a href="index.php">トップページ</a> |
+        <a href="about.php">INDEXINDEXについて</a> |
+        <a href="how_to_use.php">使い方</a> |
+        <a href="data_policy.php">データ登録方針</a> |
+        <a href="terms.php">用語説明</a> |
         <a href="privacy.php">プライバシーポリシー</a> |
-        <a href="contact.php">お問い合わせ</a> |
-        <a href="about.php">運営者情報</a>
+        <a href="contact.php">お問い合わせ</a>
         <br>
         INDEXINDEX
     </div>
