@@ -168,13 +168,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         h1 {
+            font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-weight: 700;
             font-size: 28px;
             margin-top: 0;
             margin-bottom: 20px;
         }
 
         h2 {
-            font-size: 20px;
+            font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-weight: 600;
+            font-size: 19px;
             margin-top: 32px;
             margin-bottom: 12px;
             border-left: 5px solid #333;
@@ -294,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             h2 {
-                font-size: 18px;
+                font-size: 17px;
             }
 
             button {

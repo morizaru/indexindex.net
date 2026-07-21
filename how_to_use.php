@@ -53,16 +53,20 @@ $site_header_width = 'narrow';
         }
 
         h1 {
+            font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-weight: 700;
             margin: 0 0 18px;
             font-size: 28px;
             line-height: 1.35;
         }
 
         h2 {
+            font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-weight: 600;
             margin: 32px 0 12px;
             padding-left: 10px;
             border-left: 5px solid #333;
-            font-size: 20px;
+            font-size: 19px;
         }
 
         p {
@@ -97,7 +101,7 @@ $site_header_width = 'narrow';
             }
 
             h2 {
-                font-size: 18px;
+                font-size: 17px;
             }
         }
     </style>
