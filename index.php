@@ -534,79 +534,6 @@ $menu_items = [
             gap: 16px;
         }
 
-        .about-section {
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            padding: 0;
-            margin-bottom: 24px;
-            box-sizing: border-box;
-            line-height: 1.8;
-            overflow: hidden;
-        }
-
-        .about-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            padding: 14px 18px;
-            border: 0;
-            background: #222;
-            color: #fff;
-            cursor: pointer;
-            text-align: left;
-        }
-
-        .about-toggle::after {
-            content: "+";
-            flex: 0 0 auto;
-            margin-left: 8px;
-            font-size: 20px;
-            line-height: 1;
-        }
-
-        .about-toggle[aria-expanded="true"]::after {
-            content: "-";
-        }
-
-        .about-content {
-            padding: 18px 22px 20px;
-        }
-
-        .about-toggle-title {
-            font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            margin: 0;
-            font-size: 22px;
-            font-weight: 700;
-        }
-
-        .about-section h3 {
-            margin: 18px 0 8px;
-            font-size: 17px;
-            color: #222;
-        }
-
-        .about-section p {
-            margin: 0 0 10px;
-            color: #444;
-        }
-
-        .about-section ul {
-            margin: 0 0 10px;
-            padding-left: 1.4em;
-            color: #444;
-        }
-
-        .about-section li {
-            margin-bottom: 4px;
-        }
-
-        .about-section p:last-child,
-        .about-section ul:last-child {
-            margin-bottom: 0;
-        }
-
         .menu-card {
             display: block;
             background: #fff;
@@ -635,6 +562,10 @@ $menu_items = [
             background: #222;
             color: #fff;
             line-height: 1.35;
+        }
+
+        .menu-card-about .menu-title {
+            font-size: 18px;
         }
 
         .menu-description {
@@ -720,12 +651,6 @@ $menu_items = [
 
         .side-toggle-content {
             padding-top: 10px;
-        }
-
-        .about-section .side-toggle {
-            margin: 0;
-            padding: 14px 18px;
-            border-radius: 0;
         }
 
         .side-ranking {
@@ -862,8 +787,8 @@ $menu_items = [
                 font-size: 18px;
             }
 
-            .about-section {
-                padding: 0;
+            .menu-card-about .menu-title {
+                font-size: 17px;
             }
 
             .menu-title {
@@ -897,29 +822,6 @@ $menu_items = [
                 雑誌の目次・掲載順・人物・作品情報を閲覧するためのデータベースです。
             </div>
         </div>
-
-        <section class="about-section">
-            <button type="button" class="about-toggle side-toggle" aria-expanded="false">
-                <span class="about-toggle-title">INDEXINDEXについて</span>
-            </button>
-            <div class="about-content" hidden>
-                <p>
-                    INDEXINDEXは、漫画雑誌の目次情報を整理して公開するデータベースです。雑誌号ごとの掲載作品、作者、掲載順、開始ページ、発売日などを確認できます。
-                </p>
-
-                <h3>収録している情報</h3>
-                <ul>
-                    <li>雑誌名、出版社、号数、発売日などの雑誌号情報</li>
-                    <li>各号に掲載された作品名、作者名、掲載順、開始ページ</li>
-                    <li>読切、新連載、最終回など、目次から確認できる掲載区分</li>
-                </ul>
-
-                <h3>使い方</h3>
-                <p>
-                    作品名・作者名・雑誌名から検索できるため、漫画雑誌の掲載情報を調べたいときや、過去号にどの作品が載っていたかを確認したいときに利用できます。作品連載順グラフでは、登録された掲載順データをもとに、作品の掲載位置の推移も確認できます。
-                </p>
-            </div>
-        </section>
 
         <section class="top-search" aria-label="フリーワード検索">
             <form method="get" action="search.php" class="top-search-form">
@@ -960,7 +862,8 @@ $menu_items = [
 
         <div class="menu-grid">
             <?php foreach ($menu_items as $item): ?>
-                <a class="menu-card" href="<?= h($item['url']) ?>">
+                <?php $menu_card_class = 'menu-card' . (($item['url'] ?? '') === 'about.php' ? ' menu-card-about' : ''); ?>
+                <a class="<?= h($menu_card_class) ?>" href="<?= h($item['url']) ?>">
                     <div class="menu-title"><?= h($item['title']) ?></div>
                     <div class="menu-description"><?= h($item['description']) ?></div>
                     <?php if (!empty($item['counts'])): ?>
