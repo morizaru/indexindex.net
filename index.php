@@ -568,6 +568,10 @@ $menu_items = [
             font-size: 18px;
         }
 
+        .menu-card-info .menu-title {
+            background: #555;
+        }
+
         .menu-description {
             color: #666;
             font-size: 14px;
@@ -862,7 +866,13 @@ $menu_items = [
 
         <div class="menu-grid">
             <?php foreach ($menu_items as $item): ?>
-                <?php $menu_card_class = 'menu-card' . (($item['url'] ?? '') === 'about.php' ? ' menu-card-about' : ''); ?>
+                <?php
+                    $item_url = $item['url'] ?? '';
+                    $info_urls = ['about.php', 'how_to_use.php', 'data_policy.php', 'terms.php'];
+                    $menu_card_class = 'menu-card'
+                        . ($item_url === 'about.php' ? ' menu-card-about' : '')
+                        . (in_array($item_url, $info_urls, true) ? ' menu-card-info' : '');
+                ?>
                 <a class="<?= h($menu_card_class) ?>" href="<?= h($item['url']) ?>">
                     <div class="menu-title"><?= h($item['title']) ?></div>
                     <div class="menu-description"><?= h($item['description']) ?></div>
