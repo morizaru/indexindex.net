@@ -325,17 +325,17 @@ $menu_items = [
     ],
     [
         'title' => '作品連載順グラフ',
-        'description' => '作品の掲載順を年別にグラフで表示します。',
+        'description' => '作品の掲載順をグラフで表示します。',
         'url' => 'work_graph.php',
     ],
     [
         'title' => 'メディアミックス',
-        'description' => 'メディアミックスの作品の一覧を表示します。',
+        'description' => 'アニメ化・映画化・ドラマ化などメディアミックスの作品の一覧を表示します。',
         'url' => 'mediamix.php',
     ],
     [
         'title' => 'アクセスランキング',
-        'description' => '雑誌・人物・作品のアクセスランキングを表示します。',
+        'description' => '作品・雑誌・人物のアクセスランキングを表示します。',
         'url' => 'ranking.php',
     ],
     [
