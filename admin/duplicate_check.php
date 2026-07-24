@@ -180,6 +180,7 @@ function fetch_work_creator_candidates(PDO $pdo, string $q, string $mode, string
             ic.id AS content_id,
             w.id AS work_id,
             COALESCE(NULLIF(w.title, ''), ic.title_main) AS title,
+            w.title AS work_title,
             ic.title_main,
             w.title_sub,
             w.title_kana,
@@ -442,7 +443,7 @@ $raw_candidates = [];
 $results = [];
 $groups = [];
 $counts = [];
-$candidate_fetch_limit = in_array($type, ['works', 'same_title_different_creators'], true) ? 8000 : 3000;
+$candidate_fetch_limit = $type === 'same_title_different_creators' ? 50000 : ($type === 'works' ? 8000 : 3000);
 $posted_merge_ids = [];
 $posted_target_id = 0;
 $merge_errors = [];
@@ -579,8 +580,15 @@ if ($type === 'creators') {
 
     foreach ($raw_candidates as $row) {
         $label = (string)($row['title'] ?? '');
+        $content_label = (string)($row['title_main'] ?? '');
         $normalized = normalize_name_for_duplicate_check($label);
+        $normalized_content_label = normalize_name_for_duplicate_check($content_label);
+        if ($normalized === '' && $normalized_content_label !== '') {
+            $normalized = $normalized_content_label;
+        }
         $row['normalized_label'] = $normalized;
+        $row['normalized_content_label'] = $normalized_content_label;
+        $row['title_variant_signature'] = normalize_name_for_duplicate_check($content_label) . "\n" . trim($content_label);
         $row['creator_signature'] = trim((string)($row['creator_ids'] ?? ''));
 
         if ($mode === 'all') {
@@ -591,7 +599,7 @@ if ($type === 'creators') {
             continue;
         }
 
-        $search_text = $label . ' ' . (string)($row['title_sub'] ?? '') . ' ' . (string)($row['title_kana'] ?? '');
+        $search_text = $label . ' ' . $content_label . ' ' . (string)($row['title_sub'] ?? '') . ' ' . (string)($row['title_kana'] ?? '');
         if (should_include_candidate($search_text, $normalized, $q, $normalized_q, $mode)) {
             $key = $normalized !== '' ? $normalized : normalized_prefix($label, 3);
             if ($key !== '') {
@@ -611,11 +619,13 @@ if ($type === 'same_title_different_creators') {
         }
 
         $creator_signatures = [];
+        $title_variant_signatures = [];
         foreach ($items as $item) {
             $creator_signatures[(string)($item['creator_signature'] ?? '')] = true;
+            $title_variant_signatures[(string)($item['title_variant_signature'] ?? '')] = true;
         }
 
-        if (count($creator_signatures) < 2) {
+        if (count($creator_signatures) < 2 && count($title_variant_signatures) < 2) {
             continue;
         }
 
@@ -808,7 +818,8 @@ if ($type === 'creators') {
                         <tr>
                             <th>掲載ID</th>
                             <th>作品ID</th>
-                            <th>作品名</th>
+                            <th>作品マスタ名</th>
+                            <th>掲載タイトル</th>
                             <th>サブタイトル</th>
                             <th>かな</th>
                             <th>区分</th>
@@ -824,7 +835,8 @@ if ($type === 'creators') {
                         <tr>
                             <td><?= h($row['content_id'] ?? $row['id']) ?></td>
                             <td><?= h($row['work_id'] ?? '') ?></td>
-                            <td><?= h($row['title']) ?></td>
+                            <td><?= h($row['work_title'] ?? $row['title']) ?></td>
+                            <td><?= h($row['title_main'] ?? '') ?></td>
                             <td><?= h($row['title_sub'] ?? '') ?></td>
                             <td><?= h($row['title_kana'] ?? '') ?></td>
                             <td><?= h($row['publication_type'] ?? '') ?></td>
