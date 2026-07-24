@@ -158,42 +158,55 @@ function fetch_work_creator_candidates(PDO $pdo, string $q, string $mode, string
 
     if ($q !== '' && $mode === 'contains') {
         $where_sql = "
-            WHERE LOWER(COALESCE(w.title, '')) LIKE :q
+            WHERE LOWER(COALESCE(NULLIF(w.title, ''), ic.title_main, '')) LIKE :q
                OR LOWER(COALESCE(w.title_sub, '')) LIKE :q
                OR LOWER(COALESCE(w.title_kana, '')) LIKE :q
+               OR LOWER(COALESCE(ic.title_main, '')) LIKE :q
         ";
         $params[':q'] = '%' . strtolower($q) . '%';
     } elseif ($q_head !== '' && in_array($mode, ['normalized', 'prefix'], true)) {
         $where_sql = "
-            WHERE LOWER(COALESCE(w.title, '')) LIKE :q_head
+            WHERE LOWER(COALESCE(NULLIF(w.title, ''), ic.title_main, '')) LIKE :q_head
                OR LOWER(COALESCE(w.title_sub, '')) LIKE :q_head
                OR LOWER(COALESCE(w.title_kana, '')) LIKE :q_head
+               OR LOWER(COALESCE(ic.title_main, '')) LIKE :q_head
         ";
         $params[':q_head'] = '%' . strtolower($q_head) . '%';
     }
 
     $sql = "
         SELECT
+            ic.id,
+            ic.id AS content_id,
+            w.id AS work_id,
+            COALESCE(NULLIF(w.title, ''), ic.title_main) AS title,
+            ic.title_main,
+            w.title_sub,
+            w.title_kana,
+            w.publication_type,
+            mi.issue_label,
+            m.name AS magazine_name,
+            GROUP_CONCAT(DISTINCT c.id ORDER BY c.id SEPARATOR ',') AS creator_ids,
+            GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ' / ') AS creator_names,
+            1 AS content_count
+        FROM issue_contents ic
+        LEFT JOIN works w ON w.id = ic.work_id
+        LEFT JOIN content_creators cc ON cc.content_id = ic.id AND cc.is_visible = 1
+        LEFT JOIN creators c ON c.id = cc.creator_id
+        LEFT JOIN magazine_issues mi ON mi.id = ic.issue_id
+        LEFT JOIN magazines m ON m.id = mi.magazine_id
+        {$where_sql}
+        GROUP BY
+            ic.id,
+            ic.title_main,
             w.id,
             w.title,
             w.title_sub,
             w.title_kana,
             w.publication_type,
-            GROUP_CONCAT(DISTINCT c.id ORDER BY c.id SEPARATOR ',') AS creator_ids,
-            GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ' / ') AS creator_names,
-            COUNT(DISTINCT ic.id) AS content_count
-        FROM works w
-        LEFT JOIN issue_contents ic ON ic.work_id = w.id
-        LEFT JOIN content_creators cc ON cc.content_id = ic.id AND cc.is_visible = 1
-        LEFT JOIN creators c ON c.id = cc.creator_id
-        {$where_sql}
-        GROUP BY
-            w.id,
-            w.title,
-            w.title_sub,
-            w.title_kana,
-            w.publication_type
-        ORDER BY w.title ASC, w.id ASC
+            mi.issue_label,
+            m.name
+        ORDER BY title ASC, work_id ASC, content_id ASC
         LIMIT :limit
     ";
 
@@ -793,33 +806,41 @@ if ($type === 'creators') {
                 <table>
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            <th>掲載ID</th>
+                            <th>作品ID</th>
                             <th>作品名</th>
                             <th>サブタイトル</th>
                             <th>かな</th>
                             <th>区分</th>
+                            <th>掲載号</th>
                             <th>正規化作品名</th>
                             <th>作者ID</th>
                             <th>作者</th>
-                            <th>掲載件数</th>
                             <th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
                     <?php foreach ($visible_items as $row): ?>
                         <tr>
-                            <td><?= h($row['id']) ?></td>
+                            <td><?= h($row['content_id'] ?? $row['id']) ?></td>
+                            <td><?= h($row['work_id'] ?? '') ?></td>
                             <td><?= h($row['title']) ?></td>
                             <td><?= h($row['title_sub'] ?? '') ?></td>
                             <td><?= h($row['title_kana'] ?? '') ?></td>
                             <td><?= h($row['publication_type'] ?? '') ?></td>
+                            <td>
+                                <?= h($row['magazine_name'] ?? '') ?>
+                                <?= h($row['issue_label'] ?? '') ?>
+                            </td>
                             <td><span class="normalized-text"><?= h($row['normalized_label'] ?? '') ?></span></td>
                             <td><?= h($row['creator_ids'] ?? '') ?></td>
                             <td><?= h($row['creator_names'] ?? '') ?></td>
-                            <td class="num"><?= h($row['content_count'] ?? 0) ?></td>
                             <td class="actions">
-                                <a class="button-link" href="work_edit.php?id=<?= h($row['id']) ?>">編集</a>
-                                <a class="button-link public" href="../work.php?work_id=<?= h($row['id']) ?>" target="_blank">公開</a>
+                                <a class="button-link" href="content_edit.php?id=<?= h($row['content_id'] ?? $row['id']) ?>">掲載編集</a>
+                                <?php if (!empty($row['work_id'])): ?>
+                                    <a class="button-link" href="work_edit.php?id=<?= h($row['work_id']) ?>">作品編集</a>
+                                    <a class="button-link public" href="../work.php?work_id=<?= h($row['work_id']) ?>" target="_blank">公開</a>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>

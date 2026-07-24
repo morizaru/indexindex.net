@@ -64,3 +64,27 @@ duplicate_check.php 同名作品・作者違いタブ追加 調査修正詳細
   - Switch/switch が同じ正規化キーになっているか確認しやすくするため。
   - 作者名表示だけでは同姓同名や人物ID分裂を判断しづらいため。
 - 追加修正後、C:\xampp\php\php.exe -l indexindex\admin\duplicate_check.php で構文エラーなしを確認した。
+
+追加修正2
+- 「Switch」「switch」がまだ抽出されないとの指摘を受けて、抽出単位を再調査した。
+- これまでの同名作品・作者違いタブは works の作品レコード単位で作者セットを比較していた。
+- しかし今回の目的は、同じ work_id の中に別作者の掲載が混在しているケースも見つけて、必要に応じて別作品として登録し直すことだった。
+- 作品レコードが1件だけの場合、works単位の比較では作者セットが1つに集約され、波切敦分と米原秀幸分の違いを検出できなかった。
+- fetch_work_creator_candidates() を issue_contents 基点に変更した。
+  - 掲載IDごとに作者IDセットを集計。
+  - 作品名は works.title を優先し、空の場合は issue_contents.title_main を使う。
+  - 検索対象にも issue_contents.title_main を追加。
+  - 掲載号確認用に magazine_name と issue_label も取得。
+- 結果表を作品レコード単位から掲載単位の表示に変更した。
+  - 掲載ID
+  - 作品ID
+  - 作品名
+  - 掲載号
+  - 正規化作品名
+  - 作者ID
+  - 作者
+  - 掲載編集リンク
+  - 作品編集リンク
+  - 公開リンク
+- これにより、同じ作品IDに紐づく「Switch/switch」掲載でも、掲載ごとの作者IDセットが違えば抽出対象になる。
+- 追加修正後、C:\xampp\php\php.exe -l indexindex\admin\duplicate_check.php で構文エラーなしを確認した。
