@@ -221,13 +221,19 @@ function fetch_work_creator_candidates(PDO $pdo, string $q, string $mode, string
     return $stmt->fetchAll();
 }
 
-function build_duplicate_url(string $type, string $q, string $mode, int $limit): string {
-    return 'duplicate_check.php?' . http_build_query([
+function build_duplicate_url(string $type, string $q, string $mode, int $limit, int $page = 1): string {
+    $query = [
         'type' => $type,
         'q' => $q,
         'mode' => $mode,
         'limit' => $limit,
-    ]);
+    ];
+
+    if ($page > 1) {
+        $query['page'] = $page;
+    }
+
+    return 'duplicate_check.php?' . http_build_query($query);
 }
 
 function sanitize_positive_ids($values): array {
@@ -433,6 +439,8 @@ if (!in_array($limit, $allowed_limits, true)) {
     $limit = 100;
 }
 
+$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+
 if ($q === '' && $mode !== 'all') {
     $mode = 'all';
 }
@@ -611,7 +619,6 @@ if ($type === 'creators') {
 
 if ($type === 'same_title_different_creators') {
     $filtered_groups = [];
-    $item_count = 0;
 
     foreach ($groups as $key => $items) {
         if (count($items) < 2) {
@@ -632,10 +639,6 @@ if ($type === 'same_title_different_creators') {
         $filtered_groups[$key] = $items;
         foreach ($items as $item) {
             $results[] = $item;
-            $item_count++;
-            if ($item_count >= $limit) {
-                break 2;
-            }
         }
     }
 
@@ -665,6 +668,19 @@ if ($type === 'same_title_different_creators') {
 $ids = array_values(array_unique(array_map(static function ($row) {
     return (int)$row['id'];
 }, $results)));
+
+$total_results = count($results);
+$total_pages = max(1, (int)ceil($total_results / $limit));
+if ($page > $total_pages) {
+    $page = $total_pages;
+}
+$display_offset = ($page - 1) * $limit;
+$display_results = $type === 'same_title_different_creators'
+    ? array_slice($results, $display_offset, $limit)
+    : $results;
+$display_ids = array_values(array_unique(array_map(static function ($row) {
+    return (int)$row['id'];
+}, $display_results)));
 
 $counts = $type === 'creators' ? fetch_creator_counts($pdo, $ids) : fetch_work_counts($pdo, $ids);
 $type_label = '作品名';
@@ -749,6 +765,10 @@ if ($type === 'creators') {
         対象: <?= h($type_label) ?> /
         方法: <?= h($mode) ?> /
         候補表示: <?= h(count($results)) ?> 件
+        <?php if ($type === 'same_title_different_creators' && $total_results > 0): ?>
+            / 表示ページ: <?= h($page) ?> / <?= h($total_pages) ?>
+            / 表示範囲: <?= h($display_offset + 1) ?>〜<?= h(min($display_offset + $limit, $total_results)) ?> 件
+        <?php endif; ?>
         <?php if ($mode === 'all'): ?>
             / 取得上限: <?= h($candidate_fetch_limit) ?> 件
         <?php endif; ?>
@@ -803,11 +823,11 @@ if ($type === 'creators') {
             foreach ($groups as $group_key => $items):
                 $visible_items = [];
                 foreach ($items as $item) {
-                    if (in_array((int)$item['id'], $ids, true)) {
+                    if (in_array((int)$item['id'], $display_ids, true)) {
                         $visible_items[] = $item;
                     }
                 }
-                if (count($visible_items) < 2) {
+                if (empty($visible_items)) {
                     continue;
                 }
         ?>
@@ -861,11 +881,29 @@ if ($type === 'creators') {
             </div>
         <?php
                 $displayed += count($visible_items);
-                if ($displayed >= $limit) {
-                    break;
-                }
             endforeach;
         ?>
+        <?php if ($total_pages > 1): ?>
+            <div class="pagination">
+                <?php if ($page > 1): ?>
+                    <a href="<?= h(build_duplicate_url($type, $q, $mode, $limit, 1)) ?>">最初</a>
+                    <a href="<?= h(build_duplicate_url($type, $q, $mode, $limit, $page - 1)) ?>">前へ</a>
+                <?php else: ?>
+                    <span class="disabled">最初</span>
+                    <span class="disabled">前へ</span>
+                <?php endif; ?>
+
+                <span class="current"><?= h($page) ?> / <?= h($total_pages) ?></span>
+
+                <?php if ($page < $total_pages): ?>
+                    <a href="<?= h(build_duplicate_url($type, $q, $mode, $limit, $page + 1)) ?>">次へ</a>
+                    <a href="<?= h(build_duplicate_url($type, $q, $mode, $limit, $total_pages)) ?>">最後</a>
+                <?php else: ?>
+                    <span class="disabled">次へ</span>
+                    <span class="disabled">最後</span>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
     <?php elseif ($mode === 'all' && !empty($groups)): ?>
         <?php
             $displayed = 0;
