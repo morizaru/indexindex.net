@@ -157,11 +157,19 @@ function fetch_work_creator_candidates(PDO $pdo, string $q, string $mode, string
     $params = [];
 
     if ($q !== '' && $mode === 'contains') {
-        $where_sql = "WHERE w.title LIKE :q OR w.title_sub LIKE :q OR w.title_kana LIKE :q";
-        $params[':q'] = '%' . $q . '%';
+        $where_sql = "
+            WHERE LOWER(COALESCE(w.title, '')) LIKE :q
+               OR LOWER(COALESCE(w.title_sub, '')) LIKE :q
+               OR LOWER(COALESCE(w.title_kana, '')) LIKE :q
+        ";
+        $params[':q'] = '%' . strtolower($q) . '%';
     } elseif ($q_head !== '' && in_array($mode, ['normalized', 'prefix'], true)) {
-        $where_sql = "WHERE w.title LIKE :q_head OR w.title_sub LIKE :q_head OR w.title_kana LIKE :q_head";
-        $params[':q_head'] = '%' . $q_head . '%';
+        $where_sql = "
+            WHERE LOWER(COALESCE(w.title, '')) LIKE :q_head
+               OR LOWER(COALESCE(w.title_sub, '')) LIKE :q_head
+               OR LOWER(COALESCE(w.title_kana, '')) LIKE :q_head
+        ";
+        $params[':q_head'] = '%' . strtolower($q_head) . '%';
     }
 
     $sql = "
@@ -790,6 +798,8 @@ if ($type === 'creators') {
                             <th>サブタイトル</th>
                             <th>かな</th>
                             <th>区分</th>
+                            <th>正規化作品名</th>
+                            <th>作者ID</th>
                             <th>作者</th>
                             <th>掲載件数</th>
                             <th>操作</th>
@@ -803,6 +813,8 @@ if ($type === 'creators') {
                             <td><?= h($row['title_sub'] ?? '') ?></td>
                             <td><?= h($row['title_kana'] ?? '') ?></td>
                             <td><?= h($row['publication_type'] ?? '') ?></td>
+                            <td><span class="normalized-text"><?= h($row['normalized_label'] ?? '') ?></span></td>
+                            <td><?= h($row['creator_ids'] ?? '') ?></td>
                             <td><?= h($row['creator_names'] ?? '') ?></td>
                             <td class="num"><?= h($row['content_count'] ?? 0) ?></td>
                             <td class="actions">
