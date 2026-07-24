@@ -1,0 +1,90 @@
+公開ページ 雑誌号並び順不具合 調査修正詳細
+作業日: 2026-07-24
+
+対象
+- indexindex/issues.php
+- indexindex/issue.php
+- indexindex/creator.php
+- indexindex/work.php
+
+調査結果
+- indexindex/issues.php の雑誌別号一覧では、ORDER BY が「発行年 -> 発行日 -> 発売日 -> 号数 -> ID」になっていた。
+- そのため、発売日や発行日が未入力の雑誌号は、同じ年の中で日付ありの号より後ろに寄り、号数どおりに並ばないケースがあった。
+- indexindex/issue.php の前後ナビは日付キー中心のため、一覧と前後移動の順番がずれる可能性があった。
+- indexindex/creator.php の掲載一覧も「年 -> 発行日/発売日 -> 号数」に近い順で、日付未入力時に号数順が崩れやすかった。
+- indexindex/work.php の掲載一覧は号数優先に近かったが、年キーが issue_year 寄りで、publication_year や release_date だけ入っている号との整合性が弱かった。
+
+修正内容
+- indexindex/issues.php
+  - 雑誌別号一覧に号数順キーを追加した。
+  - 並び順を「表示年 -> 号数 -> 発売日/発行日などの補助日付 -> 既存の日付キー -> ID」に変更した。
+  - issue_no が空の場合は issue_label から先頭の数値を補助的に利用する既存相当の処理も使うようにした。
+
+- indexindex/issue.php
+  - 同一雑誌内の前後ナビ用並び順に、年キーと号数キーを追加した。
+  - 補助日付は発売日を発行日より優先するようにした。
+  - 前後ナビを「年 -> 号数 -> 補助日付 -> ID」で決定するようにした。
+
+- indexindex/creator.php
+  - 掲載一覧の雑誌号順を「年 -> 号数 -> 発売日 -> 発行日 -> 雑誌名 -> ID」に変更した。
+  - 昇順・降順の両方で、日付未入力により号数順が崩れないようにした。
+
+- indexindex/work.php
+  - 掲載一覧の年キーを publication_year、release_date、publication_date、issue_year の順で補完するようにした。
+  - 補助日付は発売日を発行日より優先するようにした。
+
+検証
+- C:\xampp\php\php.exe -l indexindex\issues.php
+  - No syntax errors detected
+- C:\xampp\php\php.exe -l indexindex\issue.php
+  - No syntax errors detected
+- C:\xampp\php\php.exe -l indexindex\creator.php
+  - No syntax errors detected
+- C:\xampp\php\php.exe -l indexindex\work.php
+  - No syntax errors detected
+
+追加修正
+- 本番反映後、indexindex/issues.php の雑誌別号一覧でSQL構文エラーが発生した。
+- 原因は issue_label から「年」「月」を区切り文字として号数を推測するORDER BY内の式が、環境上の文字化けを含んだSQLとして実行され、クォートが壊れたため。
+- 復旧優先で、indexindex/issues.php のORDER BYから日本語区切り文字を使う推測式を削除した。
+- 現在の号数補助キーは issue_no を最優先し、issue_no がない場合だけ issue_label の先頭が数字のものを CAST する安全な式に限定している。
+- 追加修正後、C:\xampp\php\php.exe -l indexindex\issues.php で構文エラーなしを確認した。
+
+追加修正2
+- creator.php?creator_id=8137 で、2026年6月号の発売日が未入力のため、2026年7月号、2026年8月号、2026年6月号の順に表示される問題を確認した。
+- 原因は creator.php の号順キーが issue_no を主に見ており、issue_no が空または使えないデータでは release_date の有無が並び順に強く影響していたため。
+- issue_no が使えない場合の補助キーとして、publication_month が 1 から 12 の範囲なら月順に使うようにした。
+- 同じ考え方を indexindex/issues.php、indexindex/issue.php、indexindex/work.php にも反映した。
+- 追加修正後、以下を確認した。
+  - C:\xampp\php\php.exe -l indexindex\creator.php
+  - C:\xampp\php\php.exe -l indexindex\issues.php
+  - C:\xampp\php\php.exe -l indexindex\issue.php
+  - C:\xampp\php\php.exe -l indexindex\work.php
+  - すべて No syntax errors detected
+
+追加修正3
+- issues.php は想定どおりだが、work.php と creator.php では順番が元のままだった。
+- 2026年6月号は publication_month も並び順に使える状態ではなく、画面上の「2026年6月号」は issue_label 由来の可能性が高いと判断した。
+- creator.php と work.php に、issue_label の「年」と「月」の間にある数字を月号として読む補助キーを追加した。
+- 本番SQLで文字化けによりクォートが壊れた再発を避けるため、「年」「月」はPHPソースに直接書かず、CONVERT(UNHEX('E5B9B4') USING utf8mb4) と CONVERT(UNHEX('E69C88') USING utf8mb4) でSQL内に生成している。
+- 並び順キーは issue_no、publication_month、issue_labelから抽出した月号、日付の順にした。
+- creator.php は publication_month をSELECT/GROUP BYにも追加した。
+- 追加修正後、以下を確認した。
+  - C:\xampp\php\php.exe -l indexindex\creator.php
+  - C:\xampp\php\php.exe -l indexindex\work.php
+  - どちらも No syntax errors detected
+
+注意点
+- この作業環境ではDB接続を使った実データ表示確認は行っていない。
+- 本番またはローカルDBで、発売日未入力の号を含む雑誌を開き、号数順と前後ナビの一致を確認するのが望ましい。
+
+今後行ったほうがいいこと
+- 雑誌号の並び順SQLを共通関数または共通includeに切り出す。
+  - 現状は issues.php、issue.php、creator.php、work.php に似たORDER BYが分散しているため、今後またページごとの差が出やすい。
+- magazine_issues に正規化済みの sort_year、sort_issue_no、sort_date のような補助カラムを持たせるか、ビューで一元管理する。
+  - SQL内で毎回 COALESCE や REGEXP を使うより、保守と性能の両面で安定する。
+- issue_label から号数を推測するルールを整理する。
+  - 現在は issue_no が空のときだけ補助的に issue_label を見ているが、表記ゆれが増えると誤判定しやすい。
+- 登録画面側で、発売日が未入力でも issue_year と issue_no が入力されているか確認するバリデーションまたは警告を追加する。
+- 並び順確認用のテストデータを用意する。
+  - 発売日あり/なし、発行日あり/なし、issue_no あり/なし、特別号、合併号を含めると再発確認がしやすい。

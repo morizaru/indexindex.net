@@ -252,6 +252,41 @@ $publication_year_sql = "
     END
 ";
 
+$issue_number_order_sql = "
+    CASE
+        WHEN mi.issue_no REGEXP '^[0-9]+' THEN 0
+        WHEN mi.publication_month BETWEEN 1 AND 12 THEN 0
+        WHEN TRIM(mi.issue_label) REGEXP '^[0-9]+' THEN 0
+        ELSE 1
+    END ASC,
+    CASE
+        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
+        WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
+        WHEN TRIM(mi.issue_label) REGEXP '^[0-9]+'
+        THEN CAST(TRIM(mi.issue_label) AS UNSIGNED)
+        ELSE 999999
+    END ASC
+";
+
+$issue_date_order_sql = "
+    COALESCE(
+        NULLIF(mi.release_date, '0000-00-00'),
+        NULLIF(mi.publication_date, '0000-00-00'),
+        STR_TO_DATE(
+            CONCAT(
+                mi.publication_year,
+                '-',
+                LPAD(COALESCE(mi.publication_month, 1), 2, '0'),
+                '-',
+                LPAD(COALESCE(mi.publication_day, 1), 2, '0')
+            ),
+            '%Y-%m-%d'
+        ),
+        STR_TO_DATE(CONCAT(mi.issue_year, '-01-01'), '%Y-%m-%d'),
+        STR_TO_DATE('9999-12-31', '%Y-%m-%d')
+    )
+";
+
 // 出版社一覧：目次が1件以上ある公開済み雑誌号だけを対象にする
 $publisher_where = [
     "mi.status = 'approved'",
@@ -643,6 +678,8 @@ if ($magazine_id > 0) {
         GROUP BY mi.id
         ORDER BY
             {$publication_year_sql} ASC,
+            {$issue_number_order_sql},
+            {$issue_date_order_sql} ASC,
             CASE
                 WHEN mi.publication_date IS NOT NULL
                      AND mi.publication_date <> ''
@@ -659,8 +696,7 @@ if ($magazine_id > 0) {
             END ASC,
             CASE
                 WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
-                WHEN TRIM(mi.issue_label) REGEXP '^[0-9]{4}年[0-9]+'
-                THEN CAST(SUBSTRING_INDEX(TRIM(SUBSTRING_INDEX(mi.issue_label, '年', -1)), '月', 1) AS UNSIGNED)
+                WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
                 WHEN TRIM(mi.issue_label) REGEXP '^[0-9]+'
                 THEN CAST(TRIM(mi.issue_label) AS UNSIGNED)
                 ELSE 999999

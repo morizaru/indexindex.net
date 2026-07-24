@@ -324,6 +324,27 @@ if ($keyword !== '') {
 }
 
 // 掲載一覧
+$issue_label_year_char_sql = "CONVERT(UNHEX('E5B9B4') USING utf8mb4)";
+$issue_label_month_char_sql = "CONVERT(UNHEX('E69C88') USING utf8mb4)";
+$issue_label_year_pos_sql = "LOCATE({$issue_label_year_char_sql}, mi.issue_label)";
+$issue_label_month_pos_sql = "LOCATE({$issue_label_month_char_sql}, mi.issue_label, {$issue_label_year_pos_sql} + 1)";
+$issue_label_month_value_sql = "
+    SUBSTRING(
+        mi.issue_label,
+        {$issue_label_year_pos_sql} + CHAR_LENGTH({$issue_label_year_char_sql}),
+        {$issue_label_month_pos_sql} - {$issue_label_year_pos_sql} - CHAR_LENGTH({$issue_label_year_char_sql})
+    )
+";
+$issue_label_month_order_sql = "
+    CASE
+        WHEN {$issue_label_year_pos_sql} > 0
+             AND {$issue_label_month_pos_sql} > {$issue_label_year_pos_sql}
+             AND {$issue_label_month_value_sql} REGEXP '^[0-9]{1,2}$'
+        THEN CAST({$issue_label_month_value_sql} AS UNSIGNED)
+        ELSE NULL
+    END
+";
+
 $sql = "
     SELECT
         ic.id AS content_id,
@@ -407,27 +428,36 @@ $sql = "
       {$keyword_where_sql}
     GROUP BY ic.id
     ORDER BY
-        CASE WHEN mi.issue_year IS NULL THEN 1 ELSE 0 END ASC,
-        mi.issue_year ASC,
+        COALESCE(
+            mi.publication_year,
+            YEAR(NULLIF(mi.release_date, '0000-00-00')),
+            YEAR(NULLIF(mi.publication_date, '0000-00-00')),
+            mi.issue_year,
+            9999
+        ) ASC,
         CASE
-            WHEN mi.issue_no IS NULL OR mi.issue_no = '' THEN 1
-            ELSE 0
+            WHEN mi.issue_no REGEXP '^[0-9]+$' THEN 0
+            WHEN mi.publication_month BETWEEN 1 AND 12 THEN 0
+            WHEN {$issue_label_month_order_sql} BETWEEN 1 AND 12 THEN 0
+            ELSE 1
         END ASC,
         CASE
             WHEN mi.issue_no REGEXP '^[0-9]+$' THEN CAST(mi.issue_no AS UNSIGNED)
+            WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
+            WHEN {$issue_label_month_order_sql} BETWEEN 1 AND 12 THEN {$issue_label_month_order_sql}
             ELSE 999999
         END ASC,
         mi.issue_no ASC,
-        CASE
-            WHEN mi.publication_date IS NULL OR mi.publication_date = '' OR mi.publication_date = '0000-00-00' THEN 1
-            ELSE 0
-        END ASC,
-        mi.publication_date ASC,
         CASE
             WHEN mi.release_date IS NULL OR mi.release_date = '' OR mi.release_date = '0000-00-00' THEN 1
             ELSE 0
         END ASC,
         mi.release_date ASC,
+        CASE
+            WHEN mi.publication_date IS NULL OR mi.publication_date = '' OR mi.publication_date = '0000-00-00' THEN 1
+            ELSE 0
+        END ASC,
+        mi.publication_date ASC,
         ic.sort_order ASC,
         ic.page_start ASC,
         ic.id ASC

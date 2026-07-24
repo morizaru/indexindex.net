@@ -99,20 +99,40 @@ if (!in_array($dir, ['asc', 'desc'], true)) {
 
 $dir_sql = strtoupper($dir);
 
+$issue_label_year_char_sql = "CONVERT(UNHEX('E5B9B4') USING utf8mb4)";
+$issue_label_month_char_sql = "CONVERT(UNHEX('E69C88') USING utf8mb4)";
+$issue_label_year_pos_sql = "LOCATE({$issue_label_year_char_sql}, mi.issue_label)";
+$issue_label_month_pos_sql = "LOCATE({$issue_label_month_char_sql}, mi.issue_label, {$issue_label_year_pos_sql} + 1)";
+$issue_label_month_value_sql = "
+    SUBSTRING(
+        mi.issue_label,
+        {$issue_label_year_pos_sql} + CHAR_LENGTH({$issue_label_year_char_sql}),
+        {$issue_label_month_pos_sql} - {$issue_label_year_pos_sql} - CHAR_LENGTH({$issue_label_year_char_sql})
+    )
+";
+$issue_label_month_order_sql = "
+    CASE
+        WHEN {$issue_label_year_pos_sql} > 0
+             AND {$issue_label_month_pos_sql} > {$issue_label_year_pos_sql}
+             AND {$issue_label_month_value_sql} REGEXP '^[0-9]{1,2}$'
+        THEN CAST({$issue_label_month_value_sql} AS UNSIGNED)
+        ELSE NULL
+    END
+";
+
 $issue_order_asc = "
     COALESCE(
         mi.publication_year,
-        YEAR(mi.publication_date),
         YEAR(mi.release_date),
+        YEAR(mi.publication_date),
         mi.issue_year,
         9999
     ) ASC,
     CASE
-        WHEN mi.publication_date IS NOT NULL
-             AND mi.publication_date <> ''
-             AND mi.publication_date <> '0000-00-00'
-        THEN mi.publication_date
-        ELSE '9999-12-31'
+        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
+        WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
+        WHEN {$issue_label_month_order_sql} BETWEEN 1 AND 12 THEN {$issue_label_month_order_sql}
+        ELSE 999999
     END ASC,
     CASE
         WHEN mi.release_date IS NOT NULL
@@ -122,8 +142,11 @@ $issue_order_asc = "
         ELSE '9999-12-31'
     END ASC,
     CASE
-        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
-        ELSE 999999
+        WHEN mi.publication_date IS NOT NULL
+             AND mi.publication_date <> ''
+             AND mi.publication_date <> '0000-00-00'
+        THEN mi.publication_date
+        ELSE '9999-12-31'
     END ASC,
     m.name ASC,
     mi.id ASC
@@ -132,17 +155,16 @@ $issue_order_asc = "
 $issue_order_desc = "
     COALESCE(
         mi.publication_year,
-        YEAR(mi.publication_date),
         YEAR(mi.release_date),
+        YEAR(mi.publication_date),
         mi.issue_year,
         0
     ) DESC,
     CASE
-        WHEN mi.publication_date IS NOT NULL
-             AND mi.publication_date <> ''
-             AND mi.publication_date <> '0000-00-00'
-        THEN mi.publication_date
-        ELSE '0000-01-01'
+        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
+        WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
+        WHEN {$issue_label_month_order_sql} BETWEEN 1 AND 12 THEN {$issue_label_month_order_sql}
+        ELSE 0
     END DESC,
     CASE
         WHEN mi.release_date IS NOT NULL
@@ -152,8 +174,11 @@ $issue_order_desc = "
         ELSE '0000-01-01'
     END DESC,
     CASE
-        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
-        ELSE 0
+        WHEN mi.publication_date IS NOT NULL
+             AND mi.publication_date <> ''
+             AND mi.publication_date <> '0000-00-00'
+        THEN mi.publication_date
+        ELSE '0000-01-01'
     END DESC,
     m.name ASC,
     mi.id DESC
@@ -384,6 +409,7 @@ if ($view === 'works') {
         mi.issue_no,
         mi.publication_date,
         mi.publication_year,
+        mi.publication_month,
         mi.release_date,
 
         m.name AS magazine_name,
@@ -427,6 +453,7 @@ if ($view === 'works') {
         mi.issue_no,
         mi.publication_date,
         mi.publication_year,
+        mi.publication_month,
         mi.release_date,
         m.name,
         p.name
