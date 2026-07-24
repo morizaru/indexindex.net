@@ -619,13 +619,13 @@ if ($type === 'same_title_different_creators') {
         }
 
         $creator_signatures = [];
-        $title_variant_signatures = [];
+        $work_signatures = [];
         foreach ($items as $item) {
             $creator_signatures[(string)($item['creator_signature'] ?? '')] = true;
-            $title_variant_signatures[(string)($item['title_variant_signature'] ?? '')] = true;
+            $work_signatures[(string)($item['work_id'] ?? '')] = true;
         }
 
-        if (count($creator_signatures) < 2 && count($title_variant_signatures) < 2) {
+        if (count($creator_signatures) < 2 && count($work_signatures) < 2) {
             continue;
         }
 
