@@ -152,6 +152,53 @@ function fetch_work_counts(PDO $pdo, array $ids): array {
     return $counts;
 }
 
+function fetch_work_creator_candidates(PDO $pdo, string $q, string $mode, string $q_head, int $candidate_fetch_limit): array {
+    $where_sql = '';
+    $params = [];
+
+    if ($q !== '' && $mode === 'contains') {
+        $where_sql = "WHERE w.title LIKE :q OR w.title_sub LIKE :q OR w.title_kana LIKE :q";
+        $params[':q'] = '%' . $q . '%';
+    } elseif ($q_head !== '' && in_array($mode, ['normalized', 'prefix'], true)) {
+        $where_sql = "WHERE w.title LIKE :q_head OR w.title_sub LIKE :q_head OR w.title_kana LIKE :q_head";
+        $params[':q_head'] = '%' . $q_head . '%';
+    }
+
+    $sql = "
+        SELECT
+            w.id,
+            w.title,
+            w.title_sub,
+            w.title_kana,
+            w.publication_type,
+            GROUP_CONCAT(DISTINCT c.id ORDER BY c.id SEPARATOR ',') AS creator_ids,
+            GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ' / ') AS creator_names,
+            COUNT(DISTINCT ic.id) AS content_count
+        FROM works w
+        LEFT JOIN issue_contents ic ON ic.work_id = w.id
+        LEFT JOIN content_creators cc ON cc.content_id = ic.id AND cc.is_visible = 1
+        LEFT JOIN creators c ON c.id = cc.creator_id
+        {$where_sql}
+        GROUP BY
+            w.id,
+            w.title,
+            w.title_sub,
+            w.title_kana,
+            w.publication_type
+        ORDER BY w.title ASC, w.id ASC
+        LIMIT :limit
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value, PDO::PARAM_STR);
+    }
+    $stmt->bindValue(':limit', $candidate_fetch_limit, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetchAll();
+}
+
 function build_duplicate_url(string $type, string $q, string $mode, int $limit): string {
     return 'duplicate_check.php?' . http_build_query([
         'type' => $type,
@@ -343,7 +390,7 @@ function build_merge_sql_output(string $type, array $merge_ids, int $target_id):
     ];
 }
 
-$allowed_types = ['creators', 'works'];
+$allowed_types = ['creators', 'works', 'same_title_different_creators'];
 $allowed_modes = ['contains', 'normalized', 'prefix', 'all'];
 $allowed_limits = [50, 100, 200];
 
@@ -374,13 +421,14 @@ $raw_candidates = [];
 $results = [];
 $groups = [];
 $counts = [];
-$candidate_fetch_limit = $type === 'works' ? 8000 : 3000;
+$candidate_fetch_limit = in_array($type, ['works', 'same_title_different_creators'], true) ? 8000 : 3000;
 $posted_merge_ids = [];
 $posted_target_id = 0;
 $merge_errors = [];
 $sql_output = null;
+$can_generate_merge_sql = in_array($type, ['creators', 'works'], true);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['sql_action'] ?? '') === 'generate_merge_sql') {
+if ($can_generate_merge_sql && $_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['sql_action'] ?? '') === 'generate_merge_sql') {
     $posted_merge_ids = sanitize_positive_ids($_POST['merge_ids'] ?? []);
     $posted_target_id = (int)($_POST['target_id'] ?? 0);
     $sql_output = build_merge_sql_output($type, $posted_merge_ids, $posted_target_id);
@@ -447,7 +495,7 @@ if ($type === 'creators') {
             break;
         }
     }
-} else {
+} elseif ($type === 'works') {
     if ($q !== '' && $mode === 'contains') {
         $stmt = $pdo->prepare("
             SELECT id, title, title_sub, title_kana, publication_type
@@ -505,9 +553,63 @@ if ($type === 'creators') {
             break;
         }
     }
+} else {
+    $raw_candidates = fetch_work_creator_candidates($pdo, $q, $mode, $q_head, $candidate_fetch_limit);
+
+    foreach ($raw_candidates as $row) {
+        $label = (string)($row['title'] ?? '');
+        $normalized = normalize_name_for_duplicate_check($label);
+        $row['normalized_label'] = $normalized;
+        $row['creator_signature'] = trim((string)($row['creator_ids'] ?? ''));
+
+        if ($mode === 'all') {
+            $key = $normalized !== '' ? $normalized : normalized_prefix($label, 3);
+            if ($key !== '') {
+                $groups[$key][] = $row;
+            }
+            continue;
+        }
+
+        $search_text = $label . ' ' . (string)($row['title_sub'] ?? '') . ' ' . (string)($row['title_kana'] ?? '');
+        if (should_include_candidate($search_text, $normalized, $q, $normalized_q, $mode)) {
+            $key = $normalized !== '' ? $normalized : normalized_prefix($label, 3);
+            if ($key !== '') {
+                $groups[$key][] = $row;
+            }
+        }
+    }
 }
 
-if ($mode === 'all') {
+if ($type === 'same_title_different_creators') {
+    $filtered_groups = [];
+    $item_count = 0;
+
+    foreach ($groups as $key => $items) {
+        if (count($items) < 2) {
+            continue;
+        }
+
+        $creator_signatures = [];
+        foreach ($items as $item) {
+            $creator_signatures[(string)($item['creator_signature'] ?? '')] = true;
+        }
+
+        if (count($creator_signatures) < 2) {
+            continue;
+        }
+
+        $filtered_groups[$key] = $items;
+        foreach ($items as $item) {
+            $results[] = $item;
+            $item_count++;
+            if ($item_count >= $limit) {
+                break 2;
+            }
+        }
+    }
+
+    $groups = $filtered_groups;
+} elseif ($mode === 'all') {
     $filtered_groups = [];
     $item_count = 0;
 
@@ -534,6 +636,12 @@ $ids = array_values(array_unique(array_map(static function ($row) {
 }, $results)));
 
 $counts = $type === 'creators' ? fetch_creator_counts($pdo, $ids) : fetch_work_counts($pdo, $ids);
+$type_label = '作品名';
+if ($type === 'creators') {
+    $type_label = '人物名';
+} elseif ($type === 'same_title_different_creators') {
+    $type_label = '同名作品・作者違い';
+}
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -569,6 +677,7 @@ $counts = $type === 'creators' ? fetch_creator_counts($pdo, $ids) : fetch_work_c
     <div class="tab-nav">
         <a href="<?= h(build_duplicate_url('creators', $q, $mode, $limit)) ?>" class="<?= $type === 'creators' ? 'active' : '' ?>">人物名チェック</a>
         <a href="<?= h(build_duplicate_url('works', $q, $mode, $limit)) ?>" class="<?= $type === 'works' ? 'active' : '' ?>">作品名チェック</a>
+        <a href="<?= h(build_duplicate_url('same_title_different_creators', $q, $mode, $limit)) ?>" class="<?= $type === 'same_title_different_creators' ? 'active' : '' ?>">同名作品・作者違い</a>
     </div>
 
     <form method="get" action="duplicate_check.php" class="filter-form duplicate-filter-form">
@@ -606,7 +715,7 @@ $counts = $type === 'creators' ? fetch_creator_counts($pdo, $ids) : fetch_work_c
     </form>
 
     <div class="result-summary">
-        対象: <?= h($type === 'creators' ? '人物名' : '作品名') ?> /
+        対象: <?= h($type_label) ?> /
         方法: <?= h($mode) ?> /
         候補表示: <?= h(count($results)) ?> 件
         <?php if ($mode === 'all'): ?>
@@ -643,7 +752,7 @@ $counts = $type === 'creators' ? fetch_creator_counts($pdo, $ids) : fetch_work_c
         </div>
     <?php endif; ?>
 
-    <?php if (!empty($results)): ?>
+    <?php if (!empty($results) && $can_generate_merge_sql): ?>
         <form method="post" action="<?= h(build_duplicate_url($type, $q, $mode, $limit)) ?>" class="merge-form">
             <input type="hidden" name="sql_action" value="generate_merge_sql">
             <div class="merge-tools">
@@ -657,6 +766,61 @@ $counts = $type === 'creators' ? fetch_creator_counts($pdo, $ids) : fetch_work_c
 
     <?php if (empty($results)): ?>
         <p class="empty">候補は見つかりませんでした。</p>
+    <?php elseif ($type === 'same_title_different_creators' && !empty($groups)): ?>
+        <?php
+            $displayed = 0;
+            foreach ($groups as $group_key => $items):
+                $visible_items = [];
+                foreach ($items as $item) {
+                    if (in_array((int)$item['id'], $ids, true)) {
+                        $visible_items[] = $item;
+                    }
+                }
+                if (count($visible_items) < 2) {
+                    continue;
+                }
+        ?>
+            <div class="duplicate-group">
+                <div class="duplicate-group-title">同名作品・作者違い <span class="normalized-text"><?= h($group_key) ?></span></div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>作品名</th>
+                            <th>サブタイトル</th>
+                            <th>かな</th>
+                            <th>区分</th>
+                            <th>作者</th>
+                            <th>掲載件数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($visible_items as $row): ?>
+                        <tr>
+                            <td><?= h($row['id']) ?></td>
+                            <td><?= h($row['title']) ?></td>
+                            <td><?= h($row['title_sub'] ?? '') ?></td>
+                            <td><?= h($row['title_kana'] ?? '') ?></td>
+                            <td><?= h($row['publication_type'] ?? '') ?></td>
+                            <td><?= h($row['creator_names'] ?? '') ?></td>
+                            <td class="num"><?= h($row['content_count'] ?? 0) ?></td>
+                            <td class="actions">
+                                <a class="button-link" href="work_edit.php?id=<?= h($row['id']) ?>">編集</a>
+                                <a class="button-link public" href="../work.php?work_id=<?= h($row['id']) ?>" target="_blank">公開</a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php
+                $displayed += count($visible_items);
+                if ($displayed >= $limit) {
+                    break;
+                }
+            endforeach;
+        ?>
     <?php elseif ($mode === 'all' && !empty($groups)): ?>
         <?php
             $displayed = 0;
@@ -850,7 +1014,7 @@ $counts = $type === 'creators' ? fetch_creator_counts($pdo, $ids) : fetch_work_c
         <?php endif; ?>
     <?php endif; ?>
 
-    <?php if (!empty($results)): ?>
+    <?php if (!empty($results) && $can_generate_merge_sql): ?>
         </form>
     <?php endif; ?>
 </div>
