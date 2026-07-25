@@ -209,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("
                 SELECT id
                 FROM episode_formats
-                WHERE name = :name
+                WHERE BINARY name = :name
                   AND id <> :id
                 LIMIT 1
             ");
