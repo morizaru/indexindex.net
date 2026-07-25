@@ -325,23 +325,43 @@ $menu_items = [
     ],
     [
         'title' => '作品連載順グラフ',
-        'description' => '作品の掲載順を年別にグラフで表示します。',
+        'description' => '作品の掲載順をグラフで表示します。',
         'url' => 'work_graph.php',
     ],
     [
         'title' => 'メディアミックス',
-        'description' => 'メディアミックスの作品の一覧を表示します。',
+        'description' => 'アニメ化・映画化・ドラマ化などメディアミックスの作品の一覧を表示します。',
         'url' => 'mediamix.php',
     ],
     [
         'title' => 'アクセスランキング',
-        'description' => '雑誌・人物・作品のアクセスランキングを表示します。',
+        'description' => '作品・雑誌・人物のアクセスランキングを表示します。',
         'url' => 'ranking.php',
     ],
     [
         'title' => '最近の更新',
         'description' => '最近更新した雑誌号、人物、雑誌を表示します。',
         'url' => 'recent_updates.php',
+    ],
+    [
+        'title' => 'INDEXINDEXについて',
+        'description' => '漫画雑誌目次データベースを作っている目的と、収録している情報を説明します。',
+        'url' => 'about.php',
+    ],
+    [
+        'title' => '使い方',
+        'description' => '雑誌号、作品名、作者・関係者、掲載順グラフから探す方法を説明します。',
+        'url' => 'how_to_use.php',
+    ],
+    [
+        'title' => 'データ登録方針',
+        'description' => '雑誌号、作品名、作者名、掲載順、発売日、読切や新連載などの扱いを説明します。',
+        'url' => 'data_policy.php',
+    ],
+    [
+        'title' => '用語説明',
+        'description' => '雑誌号、目次、掲載順、読切、出張掲載、原作、作画などの用語を説明します。',
+        'url' => 'terms.php',
     ],
 ];
 ?>
@@ -514,79 +534,6 @@ $menu_items = [
             gap: 16px;
         }
 
-        .about-section {
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            padding: 0;
-            margin-bottom: 24px;
-            box-sizing: border-box;
-            line-height: 1.8;
-            overflow: hidden;
-        }
-
-        .about-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            padding: 14px 18px;
-            border: 0;
-            background: #222;
-            color: #fff;
-            cursor: pointer;
-            text-align: left;
-        }
-
-        .about-toggle::after {
-            content: "+";
-            flex: 0 0 auto;
-            margin-left: 8px;
-            font-size: 20px;
-            line-height: 1;
-        }
-
-        .about-toggle[aria-expanded="true"]::after {
-            content: "-";
-        }
-
-        .about-content {
-            padding: 18px 22px 20px;
-        }
-
-        .about-toggle-title {
-            font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            margin: 0;
-            font-size: 22px;
-            font-weight: 700;
-        }
-
-        .about-section h3 {
-            margin: 18px 0 8px;
-            font-size: 17px;
-            color: #222;
-        }
-
-        .about-section p {
-            margin: 0 0 10px;
-            color: #444;
-        }
-
-        .about-section ul {
-            margin: 0 0 10px;
-            padding-left: 1.4em;
-            color: #444;
-        }
-
-        .about-section li {
-            margin-bottom: 4px;
-        }
-
-        .about-section p:last-child,
-        .about-section ul:last-child {
-            margin-bottom: 0;
-        }
-
         .menu-card {
             display: block;
             background: #fff;
@@ -615,6 +562,14 @@ $menu_items = [
             background: #222;
             color: #fff;
             line-height: 1.35;
+        }
+
+        .menu-card-about .menu-title {
+            font-size: 18px;
+        }
+
+        .menu-card-info .menu-title {
+            background: #555;
         }
 
         .menu-description {
@@ -700,12 +655,6 @@ $menu_items = [
 
         .side-toggle-content {
             padding-top: 10px;
-        }
-
-        .about-section .side-toggle {
-            margin: 0;
-            padding: 14px 18px;
-            border-radius: 0;
         }
 
         .side-ranking {
@@ -842,8 +791,8 @@ $menu_items = [
                 font-size: 18px;
             }
 
-            .about-section {
-                padding: 0;
+            .menu-card-about .menu-title {
+                font-size: 17px;
             }
 
             .menu-title {
@@ -877,29 +826,6 @@ $menu_items = [
                 雑誌の目次・掲載順・人物・作品情報を閲覧するためのデータベースです。
             </div>
         </div>
-
-        <section class="about-section">
-            <button type="button" class="about-toggle side-toggle" aria-expanded="false">
-                <span class="about-toggle-title">INDEXINDEXについて</span>
-            </button>
-            <div class="about-content" hidden>
-                <p>
-                    INDEXINDEXは、漫画雑誌の目次情報を整理して公開するデータベースです。雑誌号ごとの掲載作品、作者、掲載順、開始ページ、発売日などを確認できます。
-                </p>
-
-                <h3>収録している情報</h3>
-                <ul>
-                    <li>雑誌名、出版社、号数、発売日などの雑誌号情報</li>
-                    <li>各号に掲載された作品名、作者名、掲載順、開始ページ</li>
-                    <li>読切、新連載、最終回など、目次から確認できる掲載区分</li>
-                </ul>
-
-                <h3>使い方</h3>
-                <p>
-                    作品名・作者名・雑誌名から検索できるため、漫画雑誌の掲載情報を調べたいときや、過去号にどの作品が載っていたかを確認したいときに利用できます。作品連載順グラフでは、登録された掲載順データをもとに、作品の掲載位置の推移も確認できます。
-                </p>
-            </div>
-        </section>
 
         <section class="top-search" aria-label="フリーワード検索">
             <form method="get" action="search.php" class="top-search-form">
@@ -940,7 +866,14 @@ $menu_items = [
 
         <div class="menu-grid">
             <?php foreach ($menu_items as $item): ?>
-                <a class="menu-card" href="<?= h($item['url']) ?>">
+                <?php
+                    $item_url = $item['url'] ?? '';
+                    $info_urls = ['about.php', 'how_to_use.php', 'data_policy.php', 'terms.php'];
+                    $menu_card_class = 'menu-card'
+                        . ($item_url === 'about.php' ? ' menu-card-about' : '')
+                        . (in_array($item_url, $info_urls, true) ? ' menu-card-info' : '');
+                ?>
+                <a class="<?= h($menu_card_class) ?>" href="<?= h($item['url']) ?>">
                     <div class="menu-title"><?= h($item['title']) ?></div>
                     <div class="menu-description"><?= h($item['description']) ?></div>
                     <?php if (!empty($item['counts'])): ?>
@@ -1040,9 +973,12 @@ $menu_items = [
 
     <div class="footer">
         <a href="index.php">トップページ</a> |
+        <a href="about.php">INDEXINDEXについて</a> |
+        <a href="how_to_use.php">使い方</a> |
+        <a href="data_policy.php">データ登録方針</a> |
+        <a href="terms.php">用語説明</a> |
         <a href="privacy.php">プライバシーポリシー</a> |
-        <a href="contact.php">お問い合わせ</a> |
-        <a href="about.php">運営者情報</a>
+        <a href="contact.php">お問い合わせ</a>
         <br>
         INDEXINDEX
     </div>

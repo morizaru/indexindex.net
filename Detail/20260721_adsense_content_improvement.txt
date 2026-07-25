@@ -1,0 +1,115 @@
+2026-07-21 INDEXINDEX AdSense再審査向け 公開ページ改善
+
+目的
+----
+morizaru.net/indexindex/ が単なる自動生成データベースではなく、運営者が漫画雑誌の目次情報を整理している資料サイトであることを、Googleとユーザーに伝わりやすくするための公開ページ改善を行った。
+
+対象範囲
+--------
+indexindex/ 配下の公開ページと、公開ページから読み込まれる共通ヘッダー・フッター、サイトマップを対象にした。
+admin/、app/、uploads/、DB接続情報、認証情報、広告コード本体は変更していない。
+
+追加・更新した説明ページ
+------------------------
+1. indexindex/about.php
+   - 「INDEXINDEXについて」として作り替え。
+   - 漫画雑誌目次データベースを作っている目的を説明。
+   - 雑誌号、作品名、作者・関係者名、掲載順、開始ページ、発売日など、収録している情報を説明。
+   - 漫画史、作品研究、作者の掲載歴確認、古書購入時の確認など、調査に使える内容を説明。
+   - 関連ページとして使い方、データ登録方針、用語説明、お問い合わせへリンク。
+
+2. indexindex/how_to_use.php
+   - 新規追加。
+   - 雑誌号から探す方法、作品名から探す方法、作者・関係者から探す方法を説明。
+   - 掲載順グラフの見方と注意点を説明。
+   - 表記ゆれや短い語で探すなど、検索のコツを説明。
+
+3. indexindex/data_policy.php
+   - 新規追加。
+   - データ登録方針を説明。
+   - 雑誌号、作品名、作者名・関係者名、掲載順、開始ページ、発売日・発行日の扱いを説明。
+   - 読切、連載、出張掲載、新連載、最終回などの掲載区分を説明。
+   - 表記ゆれ、旧名、共同名義、役割変更などの扱いを説明。
+   - 誤記や修正依頼の連絡方法を説明。
+
+4. indexindex/terms.php
+   - 新規追加。
+   - INDEXINDEX内で使う用語を説明。
+   - 雑誌号、目次、発売日、掲載順、開始ページ、読切、連載、出張掲載、新連載、最終回、作者、原作、作画などを解説。
+
+各ページのSEO設定
+----------------
+以下を各追加・更新ページに設定した。
+- title
+- meta description
+- canonical
+- viewport
+
+共通導線の追加
+--------------
+1. indexindex/includes/header.php
+   - 共通ヘッダーのメインメニューに以下を追加。
+     - INDEXINDEXについて
+     - 使い方
+     - 登録方針
+     - 用語説明
+
+2. indexindex/includes/footer.php
+   - 共通フッターに以下を追加。
+     - INDEXINDEXについて
+     - 使い方
+     - データ登録方針
+     - 用語説明
+   - 既存の「運営者情報」表記は、今回の about.php の内容に合わせて「INDEXINDEXについて」に変更。
+
+3. indexindex/index.php
+   - トップページの主なページへのリンクに以下を追加。
+     - INDEXINDEXについて
+     - 使い方
+     - データ登録方針
+     - 用語説明
+   - フッターにも同じ説明系ページへのリンクを追加。
+
+4. morizaru.net/index.php
+   - 親階層トップページの主なページへのリンクに以下を追加。
+     - INDEXINDEXについて
+     - 使い方
+     - データ登録方針
+     - 用語説明
+   - フッターにも同じ説明系ページへのリンクを追加。
+
+サイトマップ対応
+----------------
+以下の静的URLをサイトマップに追加した。
+- /about.php
+- /how_to_use.php
+- /data_policy.php
+- /terms.php
+
+変更ファイル
+------------
+- index.php
+- indexindex/about.php
+- indexindex/how_to_use.php
+- indexindex/data_policy.php
+- indexindex/terms.php
+- indexindex/includes/header.php
+- indexindex/includes/footer.php
+- indexindex/index.php
+- indexindex/sitemap.php
+- indexindex/sitemap_urls.php
+
+確認URL
+-------
+- https://morizaru.net/indexindex/about.php
+- https://morizaru.net/indexindex/how_to_use.php
+- https://morizaru.net/indexindex/data_policy.php
+- https://morizaru.net/indexindex/terms.php
+- https://morizaru.net/indexindex/index.php
+- https://morizaru.net/index.php
+
+確認状況
+--------
+差分と追加ページの内容を確認した。
+この環境では php コマンドが PATH に存在しなかったため、php -l による構文チェックは実行できなかった。
+

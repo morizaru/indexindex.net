@@ -344,10 +344,28 @@ if (!$issue) {
     exit('指定された号が見つかりません。');
 }
 
+$issue_year_order_expr = "
+    COALESCE(
+        mi.publication_year,
+        YEAR(NULLIF(mi.release_date, '0000-00-00')),
+        YEAR(NULLIF(mi.publication_date, '0000-00-00')),
+        mi.issue_year,
+        9999
+    )
+";
+
+$issue_number_order_expr = "
+    CASE
+        WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
+        WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
+        ELSE 999999
+    END
+";
+
 $issue_order_expr = "
     COALESCE(
-        NULLIF(mi.publication_date, '0000-00-00'),
         NULLIF(mi.release_date, '0000-00-00'),
+        NULLIF(mi.publication_date, '0000-00-00'),
         STR_TO_DATE(
             CONCAT(
                 mi.publication_year,
@@ -367,11 +385,15 @@ $stmt = $pdo->prepare("
     SELECT
         mi.id,
         mi.issue_label,
+        {$issue_year_order_expr} AS issue_year_order_key,
+        {$issue_number_order_expr} AS issue_number_order_key,
         {$issue_order_expr} AS issue_order_key
     FROM magazine_issues mi
     WHERE mi.magazine_id = :magazine_id
       AND mi.status IN ('approved', 'in_progress', 'verified')
     ORDER BY
+        issue_year_order_key ASC,
+        issue_number_order_key ASC,
         issue_order_key ASC,
         mi.id ASC
 ");

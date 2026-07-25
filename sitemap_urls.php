@@ -30,6 +30,9 @@ function ii_sitemap_static_paths(): array {
         '/recent_updates.php',
         '/mediamix.php',
         '/about.php',
+        '/how_to_use.php',
+        '/data_policy.php',
+        '/terms.php',
         '/contact.php',
         '/privacy.php',
     ];

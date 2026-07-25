@@ -259,7 +259,7 @@ if (!function_exists('ii_access_log')) {
         if ($ua === '') return false;
 
         return (bool)preg_match(
-            '/bot|crawl|spider|slurp|bingpreview|meta-externalagent|facebookexternalhit|facebot|line-poker|discordbot|twitterbot|google-inspectiontool|gptbot|amazonbot|claudebot|perplexitybot|applebot|ccbot|dataforseobot|petalbot|bytespider|semrushbot|ahrefsbot|mj12bot|dotbot|yandexbot|oai-searchbot|chatgpt-user|duckduckbot|coccocbot|shapbot/i',
+            '/serankingbacklinksbot|oai-searchbot|chatgpt-user|trendictionbot|yak\/|linkfluence|duckduckbot|queritbot|google-display-ads-bot|coccocbot|shapbot|duckassistbot|bilateralnavigator|sleepbot|bot|crawl|spider|slurp|bingpreview|meta-externalagent|facebookexternalhit|facebot|line-poker|discordbot|twitterbot|google-inspectiontool|gptbot|amazonbot|claudebot|perplexitybot|applebot|ccbot|dataforseobot|petalbot|bytespider|semrushbot|ahrefsbot|mj12bot|dotbot|yandexbot/i',
             $ua
         );
     }
@@ -518,11 +518,19 @@ if (!function_exists('ii_access_log')) {
         if (stripos($ua, 'Google-InspectionTool') !== false) return 'Google Inspection';
         if (stripos($ua, 'Bingbot') !== false) return 'Bingbot';
         if (stripos($ua, 'Slurp') !== false) return 'Yahoo Slurp';
+        if (stripos($ua, 'SERankingBacklinksBot') !== false) return 'SERankingBacklinksBot';
         if (stripos($ua, 'OAI-SearchBot') !== false) return 'OAI-SearchBot';
         if (stripos($ua, 'ChatGPT-User') !== false) return 'ChatGPT-User';
+        if (stripos($ua, 'trendictionbot') !== false) return 'trendictionbot';
+        if (stripos($ua, 'YaK/') !== false || stripos($ua, 'linkfluence') !== false) return 'Linkfluence YaK';
         if (stripos($ua, 'DuckDuckBot') !== false) return 'DuckDuckBot';
+        if (stripos($ua, 'QueritBot') !== false) return 'QueritBot';
+        if (stripos($ua, 'Google-Display-Ads-Bot') !== false) return 'Google Display Ads Bot';
         if (stripos($ua, 'coccocbot') !== false) return 'CocCocBot';
         if (stripos($ua, 'ShapBot') !== false) return 'ShapBot';
+        if (stripos($ua, 'DuckAssistBot') !== false) return 'DuckAssistBot';
+        if (stripos($ua, 'BilateralNavigator') !== false) return 'BilateralNavigator';
+        if (stripos($ua, 'SleepBot') !== false) return 'SleepBot';
         if (stripos($ua, 'GPTBot') !== false) return 'GPTBot';
         if (stripos($ua, 'Amazonbot') !== false) return 'Amazonbot';
         if (stripos($ua, 'ClaudeBot') !== false) return 'ClaudeBot';

@@ -19,6 +19,8 @@ $site_url  = 'https://morizaru.net/indexindex/';
     <meta charset="UTF-8">
     <title>プライバシーポリシー - <?= h($site_name) ?></title>
 
+    <script type="text/javascript" src="//code.typesquare.com/static/ZDbTe4IzCko%253D/ts106f.js" charset="utf-8"></script>
+
     <?php include __DIR__ . '/includes/adsense_head.php'; ?>
 
     <style>
@@ -44,13 +46,17 @@ $site_url  = 'https://morizaru.net/indexindex/';
         }
 
         h1 {
+            font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-weight: 700;
             font-size: 28px;
             margin-top: 0;
             margin-bottom: 20px;
         }
 
         h2 {
-            font-size: 20px;
+            font-family: "GSanSerif-B", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-weight: 600;
+            font-size: 19px;
             margin-top: 32px;
             margin-bottom: 12px;
             border-left: 5px solid #333;
@@ -101,7 +107,7 @@ $site_url  = 'https://morizaru.net/indexindex/';
             }
 
             h2 {
-                font-size: 18px;
+                font-size: 17px;
             }
         }
     </style>
