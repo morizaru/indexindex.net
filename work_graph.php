@@ -441,6 +441,11 @@ if ($work_id > 0) {
         $graph_year_min = (int)min($graph_years);
         $graph_year_max = (int)max($graph_years);
 
+        if ($year > 0 && $year_from <= 0 && $year_to <= 0) {
+            $year_from = $year;
+            $year_to = $year;
+        }
+
         if ($year_from <= 0) {
             $year_from = $graph_year_min;
         }
