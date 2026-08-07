@@ -172,7 +172,7 @@ $issue_label_issue_order_sql = "
     CASE
         WHEN {$issue_label_year_pos_sql} > 0
              AND {$issue_label_issue_pos_sql} > {$issue_label_year_pos_sql}
-             AND {$issue_label_issue_value_sql} REGEXP '^[0-9]+$'
+             AND {$issue_label_issue_value_sql} REGEXP '^[0-9]+'
         THEN CAST({$issue_label_issue_value_sql} AS UNSIGNED)
         ELSE NULL
     END
