@@ -157,6 +157,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // 掲載一覧
+$issue_label_year_char_sql = "CONVERT(UNHEX('E5B9B4') USING utf8mb4)";
+$issue_label_issue_char_sql = "CONVERT(UNHEX('E58FB7') USING utf8mb4)";
+$issue_label_year_pos_sql = "LOCATE({$issue_label_year_char_sql}, mi.issue_label)";
+$issue_label_issue_pos_sql = "LOCATE({$issue_label_issue_char_sql}, mi.issue_label, {$issue_label_year_pos_sql} + 1)";
+$issue_label_issue_value_sql = "
+    SUBSTRING(
+        mi.issue_label,
+        {$issue_label_year_pos_sql} + CHAR_LENGTH({$issue_label_year_char_sql}),
+        {$issue_label_issue_pos_sql} - {$issue_label_year_pos_sql} - CHAR_LENGTH({$issue_label_year_char_sql})
+    )
+";
+$issue_label_issue_order_sql = "
+    CASE
+        WHEN {$issue_label_year_pos_sql} > 0
+             AND {$issue_label_issue_pos_sql} > {$issue_label_year_pos_sql}
+             AND {$issue_label_issue_value_sql} REGEXP '^[0-9]+$'
+        THEN CAST({$issue_label_issue_value_sql} AS UNSIGNED)
+        ELSE NULL
+    END
+";
+
 $stmt = $pdo->prepare("
     SELECT
         ic.id AS content_id,
@@ -199,11 +220,26 @@ $stmt = $pdo->prepare("
     WHERE ic.work_id = :work_id
     GROUP BY ic.id
     ORDER BY
-        mi.issue_year ASC,
+        COALESCE(
+            mi.publication_year,
+            YEAR(NULLIF(mi.release_date, '0000-00-00')),
+            YEAR(NULLIF(mi.publication_date, '0000-00-00')),
+            mi.issue_year,
+            9999
+        ) ASC,
+        CASE
+            WHEN mi.issue_no REGEXP '^[0-9]+' THEN 0
+            WHEN {$issue_label_issue_order_sql} IS NOT NULL THEN 0
+            WHEN mi.publication_month BETWEEN 1 AND 12 THEN 0
+            ELSE 1
+        END ASC,
         CASE
             WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
+            WHEN {$issue_label_issue_order_sql} IS NOT NULL THEN {$issue_label_issue_order_sql}
+            WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
             ELSE 999999
         END ASC,
+        mi.issue_no ASC,
         mi.id ASC,
         ic.sort_order ASC
 ");
