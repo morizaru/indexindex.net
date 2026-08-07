@@ -287,9 +287,11 @@ $issue_date_order_sql = "
     )
 ";
 
-// 出版社一覧：目次が1件以上ある公開済み雑誌号だけを対象にする
+// 出版社一覧：目次が1件以上ある公開対象の雑誌号だけを対象にする
+$public_issue_status_sql = "mi.status IN ('approved', 'in_progress', 'verified')";
+
 $publisher_where = [
-    "mi.status = 'approved'",
+    $public_issue_status_sql,
 ];
 $publisher_params = [];
 
@@ -315,7 +317,7 @@ $stmt->execute($publisher_params);
 $publishers = $stmt->fetchAll();
 
 $magazine_option_where = [
-    "mi.status = 'approved'",
+    $public_issue_status_sql,
 ];
 $magazine_option_params = [];
 
@@ -352,9 +354,9 @@ $stmt = $pdo->prepare("
 $stmt->execute($magazine_option_params);
 $magazine_options = $stmt->fetchAll();
 
-// 年一覧：発行年ベース。目次が1件以上ある公開済み雑誌号だけを対象にする
+// 年一覧：発行年ベース。目次が1件以上ある公開対象の雑誌号だけを対象にする
 $year_where = [
-    "mi.status = 'approved'",
+    $public_issue_status_sql,
     "{$publication_year_sql} IS NOT NULL",
 ];
 $year_params = [];
@@ -386,7 +388,7 @@ $years = $stmt->fetchAll();
 $where = [];
 $params = [];
 
-$where[] = "mi.status = 'approved'";
+$where[] = $public_issue_status_sql;
 
 if ($publisher_id > 0) {
     $where[] = "p.id = :publisher_id";
@@ -637,7 +639,7 @@ if ($magazine_id > 0) {
         JOIN magazines m ON mi.magazine_id = m.id
         JOIN issue_contents ic ON mi.id = ic.issue_id
         WHERE mi.magazine_id = :magazine_id
-          AND mi.status = 'approved'
+          AND {$public_issue_status_sql}
           {$issue_keyword_where_sql}
     ");
     $count_stmt->execute(array_merge([
@@ -673,7 +675,7 @@ if ($magazine_id > 0) {
         JOIN magazines m ON mi.magazine_id = m.id
         JOIN issue_contents ic ON mi.id = ic.issue_id
         WHERE mi.magazine_id = :magazine_id
-          AND mi.status = 'approved'
+          AND {$public_issue_status_sql}
           {$issue_keyword_where_sql}
         GROUP BY mi.id
         ORDER BY
