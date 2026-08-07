@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("
                 SELECT id
                 FROM works
-                WHERE title = :title
+                WHERE BINARY title = BINARY :title
                   AND id <> :id
                 LIMIT 1
             ");

@@ -433,7 +433,7 @@ $stmt->execute([
             $stmt = $pdo->prepare("
                 SELECT id
                 FROM works
-                WHERE title = :title
+                WHERE BINARY title = BINARY :title
                 LIMIT 1
             ");
             $stmt->execute([

@@ -198,7 +198,7 @@ function get_or_create_work($pdo, $title) {
     $stmt = $pdo->prepare("
         SELECT id
         FROM works
-        WHERE title = :title
+        WHERE BINARY title = BINARY :title
         LIMIT 1
     ");
     $stmt->execute([

@@ -113,7 +113,7 @@ function get_or_create_work_id($pdo, $title, $publication_type, $selected_work_i
     $stmt = $pdo->prepare("
         SELECT id, publication_type
         FROM works
-        WHERE title = :title
+        WHERE BINARY title = BINARY :title
         LIMIT 1
     ");
     $stmt->execute([
