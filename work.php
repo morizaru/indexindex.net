@@ -330,6 +330,13 @@ $issue_label_issue_char_sql = "CONVERT(UNHEX('E58FB7') USING utf8mb4)";
 $issue_label_year_pos_sql = "LOCATE({$issue_label_year_char_sql}, mi.issue_label)";
 $issue_label_month_pos_sql = "LOCATE({$issue_label_month_char_sql}, mi.issue_label, {$issue_label_year_pos_sql} + 1)";
 $issue_label_issue_pos_sql = "LOCATE({$issue_label_issue_char_sql}, mi.issue_label, {$issue_label_year_pos_sql} + 1)";
+$issue_label_year_value_sql = "
+    SUBSTRING(
+        mi.issue_label,
+        1,
+        {$issue_label_year_pos_sql} - 1
+    )
+";
 $issue_label_month_value_sql = "
     SUBSTRING(
         mi.issue_label,
@@ -359,6 +366,14 @@ $issue_label_issue_order_sql = "
              AND {$issue_label_issue_pos_sql} > {$issue_label_year_pos_sql}
              AND {$issue_label_issue_value_sql} REGEXP '^[0-9]+'
         THEN CAST({$issue_label_issue_value_sql} AS UNSIGNED)
+        ELSE NULL
+    END
+";
+$issue_label_year_order_sql = "
+    CASE
+        WHEN {$issue_label_year_pos_sql} > 0
+             AND {$issue_label_year_value_sql} REGEXP '^[0-9]{4}$'
+        THEN CAST({$issue_label_year_value_sql} AS UNSIGNED)
         ELSE NULL
     END
 ";
@@ -447,10 +462,11 @@ $sql = "
     GROUP BY ic.id
     ORDER BY
         COALESCE(
+            mi.issue_year,
+            {$issue_label_year_order_sql},
             mi.publication_year,
             YEAR(NULLIF(mi.release_date, '0000-00-00')),
             YEAR(NULLIF(mi.publication_date, '0000-00-00')),
-            mi.issue_year,
             9999
         ) ASC,
         CASE
