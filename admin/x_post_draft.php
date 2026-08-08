@@ -39,7 +39,7 @@ function get_current_site_stats(PDO $pdo): array {
         'snapshot_at' => date('Y-m-d 00:00:00'),
         'magazine_count' => (int)$pdo->query("SELECT COUNT(*) FROM magazines")->fetchColumn(),
         'issue_count' => (int)$pdo->query("SELECT COUNT(*) FROM magazine_issues")->fetchColumn(),
-        'content_count' => (int)$pdo->query("SELECT COUNT(*) FROM issue_contents")->fetchColumn(),
+        'content_count' => (int)$pdo->query("SELECT COUNT(*) FROM works")->fetchColumn(),
         'creator_count' => (int)$pdo->query("
             SELECT COUNT(DISTINCT c.id)
             FROM creators c

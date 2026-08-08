@@ -22,7 +22,7 @@ X 投稿下書きで使う集計 SQL を、登録済みデータの総数をカ�
 
 - 登録雑誌数: `SELECT COUNT(*) FROM magazines`
 - 登録雑誌号数: `SELECT COUNT(*) FROM magazine_issues`
-- 登録目次件数: `SELECT COUNT(*) FROM issue_contents`
+- 登録作品数: `SELECT COUNT(*) FROM works`
 - 登録人物数: `creators` と `content_creators` を結合し、`is_visible = 1` を満たす件数をカウント
 
 ## 確認結果
