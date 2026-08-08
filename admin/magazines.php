@@ -20,6 +20,43 @@ function shorten_text($value, $length = 30) {
     return mb_substr($value, 0, $length, 'UTF-8') . '…';
 }
 
+function build_magazine_sort_url(string $sort_key, string $current_sort, string $current_dir): string {
+    $next_dir = 'asc';
+
+    if ($current_sort === $sort_key && $current_dir === 'asc') {
+        $next_dir = 'desc';
+    }
+
+    $query = [];
+    if ($sort_key !== '') {
+        $query['sort'] = $sort_key;
+    }
+    if ($next_dir !== 'asc') {
+        $query['dir'] = $next_dir;
+    }
+
+    $query_string = http_build_query($query);
+    return 'magazines.php' . ($query_string !== '' ? '?' . $query_string : '');
+}
+
+function sort_mark(string $sort_key, string $current_sort, string $current_dir): string {
+    if ($current_sort !== $sort_key) {
+        return '';
+    }
+
+    return $current_dir === 'asc' ? ' ▲' : ' ▼';
+}
+
+$sort = trim((string)($_GET['sort'] ?? 'publisher'));
+$dir = strtolower(trim((string)($_GET['dir'] ?? 'asc')));
+$allowed_sorts = ['name', 'publisher', 'issue_count'];
+if (!in_array($sort, $allowed_sorts, true)) {
+    $sort = 'publisher';
+}
+if ($dir !== 'asc' && $dir !== 'desc') {
+    $dir = 'asc';
+}
+
 $message = '';
 $error = '';
 
@@ -86,8 +123,18 @@ $sql = "
     JOIN publishers p ON m.publisher_id = p.id
     LEFT JOIN magazine_issues mi ON m.id = mi.magazine_id
     GROUP BY m.id
-    ORDER BY p.name ASC, m.name ASC
 ";
+
+$order_by = 'p.name ASC, m.name ASC';
+if ($sort === 'name') {
+    $order_by = 'm.name ' . strtoupper($dir);
+} elseif ($sort === 'publisher') {
+    $order_by = 'p.name ' . strtoupper($dir) . ', m.name ASC';
+} elseif ($sort === 'issue_count') {
+    $order_by = 'issue_count ' . strtoupper($dir) . ', p.name ASC, m.name ASC';
+}
+
+$sql .= "\n    ORDER BY {$order_by}\n";
 
 $stmt = $pdo->query($sql);
 $magazines = $stmt->fetchAll();
@@ -182,6 +229,15 @@ $magazines = $stmt->fetchAll();
         th {
             background: #eee;
             text-align: left;
+        }
+
+        th a.sort-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        th a.sort-link:hover {
+            text-decoration: underline;
         }
 
         a {
@@ -337,10 +393,16 @@ $magazines = $stmt->fetchAll();
         <table id="magazinesTable">
             <thead>
                 <tr>
-                    <th>雑誌名</th>
-                    <th>出版社</th>
+                    <th>
+                        <a class="sort-link" href="<?= h(build_magazine_sort_url('name', $sort, $dir)) ?>">雑誌名<span class="sort-mark"><?= h(sort_mark('name', $sort, $dir)) ?></span></a>
+                    </th>
+                    <th>
+                        <a class="sort-link" href="<?= h(build_magazine_sort_url('publisher', $sort, $dir)) ?>">出版社<span class="sort-mark"><?= h(sort_mark('publisher', $sort, $dir)) ?></span></a>
+                    </th>
                     <th class="extra">追加情報</th>
-                    <th class="num">登録号数</th>
+                    <th class="num">
+                        <a class="sort-link" href="<?= h(build_magazine_sort_url('issue_count', $sort, $dir)) ?>">登録号数<span class="sort-mark"><?= h(sort_mark('issue_count', $sort, $dir)) ?></span></a>
+                    </th>
                     <th class="year">収録年</th>
                     <th>更新日時</th>
                     <th class="actions">操作</th>
