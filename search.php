@@ -28,6 +28,43 @@ function kana_like_values($value) {
     ];
 }
 
+function split_search_keywords(string $value): array {
+    $value = trim($value);
+    if ($value === '') {
+        return [];
+    }
+
+    $parts = preg_split('/[\s,，、]+/u', $value, -1, PREG_SPLIT_NO_EMPTY);
+    $tokens = [];
+
+    foreach ($parts as $part) {
+        $token = trim((string)$part);
+        if ($token !== '') {
+            $tokens[] = $token;
+        }
+    }
+
+    return $tokens;
+}
+
+function build_multi_keyword_clause(array $tokens, array $field_names, string $param_prefix): string {
+    if (empty($tokens)) {
+        return '1 = 0';
+    }
+
+    $clauses = [];
+
+    foreach ($tokens as $index => $token) {
+        $token_terms = [];
+        foreach ($field_names as $field_name) {
+            $token_terms[] = $field_name . ' LIKE :' . $param_prefix . '_' . $index;
+        }
+        $clauses[] = '(' . implode(' OR ', $token_terms) . ')';
+    }
+
+    return implode(' OR ', $clauses);
+}
+
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $target = isset($_GET['target']) ? trim((string)$_GET['target']) : 'all';
 
@@ -51,10 +88,16 @@ $target_labels = [
     'creator' => '作者名',
 ];
 
-if ($q !== '') {
-    $keyword = '%' . $q . '%';
+$keyword_tokens = split_search_keywords($q);
 
+if ($q !== '' && !empty($keyword_tokens)) {
     if ($target === 'all' || $target === 'magazine') {
+        $magazine_where = build_multi_keyword_clause($keyword_tokens, ['m.name', 'm.name_search', 'mi.issue_label', 'mi.issue_label_special'], 'mag_keyword');
+        $magazine_params = [];
+        foreach ($keyword_tokens as $index => $keyword_token) {
+            $magazine_params[':mag_keyword_' . $index] = '%' . $keyword_token . '%';
+        }
+
         $sql = "
             SELECT
                 m.id AS magazine_id,
@@ -69,12 +112,7 @@ if ($q !== '') {
             LEFT JOIN magazine_issues mi
                 ON mi.magazine_id = m.id
                AND mi.status = 'approved'
-            WHERE (
-                m.name LIKE :keyword
-                OR m.name_search LIKE :keyword_name_search
-                OR mi.issue_label LIKE :keyword_issue_label
-                OR mi.issue_label_special LIKE :keyword_issue_label_special
-            )
+            WHERE {$magazine_where}
             GROUP BY
                 m.id,
                 m.name,
@@ -89,12 +127,7 @@ if ($q !== '') {
         ";
 
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            ':keyword' => $keyword,
-            ':keyword_name_search' => $keyword,
-            ':keyword_issue_label' => $keyword,
-            ':keyword_issue_label_special' => $keyword,
-        ]);
+        $stmt->execute($magazine_params);
         if ($target === 'all') {
             $all_results['magazine'] = $stmt->fetchAll();
         } else {
@@ -103,6 +136,12 @@ if ($q !== '') {
     }
 
     if ($target === 'all' || $target === 'work') {
+        $work_where = build_multi_keyword_clause($keyword_tokens, ['w.title'], 'work_keyword');
+        $work_params = [];
+        foreach ($keyword_tokens as $index => $keyword_token) {
+            $work_params[':work_keyword_' . $index] = '%' . $keyword_token . '%';
+        }
+
         $sql = "
             SELECT
                 w.id AS work_id,
@@ -117,7 +156,7 @@ if ($q !== '') {
             LEFT JOIN magazine_issues mi
                 ON mi.id = ic.issue_id
                AND mi.status = 'approved'
-            WHERE w.title LIKE :keyword
+            WHERE {$work_where}
             GROUP BY
                 w.id,
                 w.title,
@@ -129,7 +168,7 @@ if ($q !== '') {
         ";
 
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([':keyword' => $keyword]);
+        $stmt->execute($work_params);
         if ($target === 'all') {
             $all_results['work'] = $stmt->fetchAll();
         } else {
@@ -138,6 +177,25 @@ if ($q !== '') {
     }
 
     if ($target === 'all' || $target === 'creator') {
+        $creator_where_clauses = [];
+        $creator_params = [];
+
+        foreach ($keyword_tokens as $index => $keyword_token) {
+            $keyword_kana_likes = kana_like_values($keyword_token);
+            $creator_where_clauses[] = "(
+                c.name LIKE :creator_keyword_{$index}
+                OR c.name_search LIKE :creator_keyword_{$index}
+                OR c.name_kana LIKE :creator_kana_base_{$index}
+                OR c.name_kana LIKE :creator_kana_hira_{$index}
+                OR c.name_kana LIKE :creator_kana_kata_{$index}
+            )";
+
+            $creator_params[':creator_keyword_' . $index] = '%' . $keyword_token . '%';
+            $creator_params[':creator_kana_base_' . $index] = $keyword_kana_likes['base'];
+            $creator_params[':creator_kana_hira_' . $index] = $keyword_kana_likes['hira'];
+            $creator_params[':creator_kana_kata_' . $index] = $keyword_kana_likes['kata'];
+        }
+
         $sql = "
             SELECT
                 c.id AS creator_id,
@@ -154,13 +212,7 @@ if ($q !== '') {
             LEFT JOIN magazine_issues mi
                 ON mi.id = ic.issue_id
                AND mi.status = 'approved'
-            WHERE (
-                c.name LIKE :keyword_name
-                OR c.name_search LIKE :keyword_name_search
-                OR c.name_kana LIKE :keyword_name_kana
-                OR c.name_kana LIKE :keyword_name_kana_hira
-                OR c.name_kana LIKE :keyword_name_kana_kata
-            )
+            WHERE " . implode(' OR ', $creator_where_clauses) . "
             GROUP BY
                 c.id,
                 c.name
@@ -171,14 +223,7 @@ if ($q !== '') {
         ";
 
         $stmt = $pdo->prepare($sql);
-        $keyword_kana_likes = kana_like_values($q);
-        $stmt->execute([
-            ':keyword_name' => $keyword,
-            ':keyword_name_search' => $keyword,
-            ':keyword_name_kana' => $keyword_kana_likes['base'],
-            ':keyword_name_kana_hira' => $keyword_kana_likes['hira'],
-            ':keyword_name_kana_kata' => $keyword_kana_likes['kata'],
-        ]);
+        $stmt->execute($creator_params);
         if ($target === 'all') {
             $all_results['creator'] = $stmt->fetchAll();
         } else {
@@ -574,7 +619,7 @@ require_once __DIR__ . '/includes/header.php';
 
     <form method="get" action="search.php" class="search-form">
         <div class="search-box">
-            <input type="text" name="q" value="<?= h($q) ?>" placeholder="検索キーワードを入力">
+            <input type="text" name="q" value="<?= h($q) ?>" placeholder="例：鳥山明 DRAGON / 作者名・雑誌名・作品名">
             <button type="submit">検索</button>
         </div>
 
