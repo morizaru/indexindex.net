@@ -47,30 +47,39 @@ function split_search_keywords(string $value): array {
     return $tokens;
 }
 
-function build_multi_keyword_clause(array $tokens, array $field_names, string $param_prefix): string {
+function build_multi_keyword_clause(array $tokens, array $field_names, string $param_prefix, string $match_mode = 'or'): string {
     if (empty($tokens)) {
         return '1 = 0';
     }
 
-    $clauses = [];
+    $token_clauses = [];
 
     foreach ($tokens as $index => $token) {
         $token_terms = [];
         foreach ($field_names as $field_name) {
             $token_terms[] = $field_name . ' LIKE :' . $param_prefix . '_' . $index;
         }
-        $clauses[] = '(' . implode(' OR ', $token_terms) . ')';
+        $token_clauses[] = '(' . implode(' OR ', $token_terms) . ')';
     }
 
-    return implode(' OR ', $clauses);
+    if ($match_mode === 'and') {
+        return '(' . implode(' AND ', $token_clauses) . ')';
+    }
+
+    return '(' . implode(' OR ', $token_clauses) . ')';
 }
 
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $target = isset($_GET['target']) ? trim((string)$_GET['target']) : 'all';
+$match_mode = isset($_GET['match_mode']) ? strtolower(trim((string)$_GET['match_mode'])) : 'and';
 
 $allowed_targets = ['all', 'magazine', 'work', 'creator'];
 if (!in_array($target, $allowed_targets, true)) {
     $target = 'all';
+}
+
+if (!in_array($match_mode, ['and', 'or'], true)) {
+    $match_mode = 'and';
 }
 
 $results = [];
@@ -92,7 +101,12 @@ $keyword_tokens = split_search_keywords($q);
 
 if ($q !== '' && !empty($keyword_tokens)) {
     if ($target === 'all' || $target === 'magazine') {
-        $magazine_where = build_multi_keyword_clause($keyword_tokens, ['m.name', 'm.name_search', 'mi.issue_label', 'mi.issue_label_special'], 'mag_keyword');
+        $magazine_where = build_multi_keyword_clause(
+            $keyword_tokens,
+            ['m.name', 'm.name_search', 'mi.issue_label', 'mi.issue_label_special', 'p.name'],
+            'mag_keyword',
+            $match_mode
+        );
         $magazine_params = [];
         foreach ($keyword_tokens as $index => $keyword_token) {
             $magazine_params[':mag_keyword_' . $index] = '%' . $keyword_token . '%';
@@ -136,7 +150,12 @@ if ($q !== '' && !empty($keyword_tokens)) {
     }
 
     if ($target === 'all' || $target === 'work') {
-        $work_where = build_multi_keyword_clause($keyword_tokens, ['w.title'], 'work_keyword');
+        $work_where = build_multi_keyword_clause(
+            $keyword_tokens,
+            ['w.title', 'c.name', 'c.name_search'],
+            'work_keyword',
+            $match_mode
+        );
         $work_params = [];
         foreach ($keyword_tokens as $index => $keyword_token) {
             $work_params[':work_keyword_' . $index] = '%' . $keyword_token . '%';
@@ -153,6 +172,10 @@ if ($q !== '' && !empty($keyword_tokens)) {
             FROM works w
             LEFT JOIN issue_contents ic
                 ON ic.work_id = w.id
+            LEFT JOIN content_creators cc
+                ON cc.content_id = ic.id
+            LEFT JOIN creators c
+                ON c.id = cc.creator_id
             LEFT JOIN magazine_issues mi
                 ON mi.id = ic.issue_id
                AND mi.status = 'approved'
@@ -196,6 +219,10 @@ if ($q !== '' && !empty($keyword_tokens)) {
             $creator_params[':creator_kana_kata_' . $index] = $keyword_kana_likes['kata'];
         }
 
+        $creator_where = ($match_mode === 'and')
+            ? '(' . implode(' AND ', $creator_where_clauses) . ')'
+            : '(' . implode(' OR ', $creator_where_clauses) . ')';
+
         $sql = "
             SELECT
                 c.id AS creator_id,
@@ -212,7 +239,7 @@ if ($q !== '' && !empty($keyword_tokens)) {
             LEFT JOIN magazine_issues mi
                 ON mi.id = ic.issue_id
                AND mi.status = 'approved'
-            WHERE " . implode(' OR ', $creator_where_clauses) . "
+            WHERE {$creator_where}
             GROUP BY
                 c.id,
                 c.name
@@ -628,6 +655,12 @@ require_once __DIR__ . '/includes/header.php';
             <label><input type="radio" name="target" value="magazine"<?= selected_attr('magazine', $target) ?>> 雑誌名</label>
             <label><input type="radio" name="target" value="work"<?= selected_attr('work', $target) ?>> 作品名</label>
             <label><input type="radio" name="target" value="creator"<?= selected_attr('creator', $target) ?>> 作者名</label>
+        </div>
+
+        <div class="radio-row match-mode-row">
+            <span class="match-mode-label">検索条件</span>
+            <label><input type="radio" name="match_mode" value="and"<?= selected_attr('and', $match_mode) ?>> AND</label>
+            <label><input type="radio" name="match_mode" value="or"<?= selected_attr('or', $match_mode) ?>> OR</label>
         </div>
     </form>
 
