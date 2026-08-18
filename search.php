@@ -47,12 +47,27 @@ function split_search_keywords(string $value): array {
     return $tokens;
 }
 
+function search_symbol_variants(): array {
+    return [
+        ' ', '　', '・', '･', '·', '•', '…',
+        '♥', '♡', '★', '☆', '○', '●', '◎', '◇', '◆', '□', '■', '△', '▲', '▽', '▼', '◯', '※',
+        '／', '＼', '：', '；', '！', '？', '（', '）', '「', '」', '『', '』', '［', '］', '〈', '〉', '《', '》',
+        '、', '。', '.', ',', '!', '?', ':', ';', '-', '—', '–', '~', '〜', '+', '=', '@', '#', '$', '%', '&', '*', '/', '(', ')', '[', ']', '{', '}', '<', '>',
+    ];
+}
+
 function normalized_search_sql(string $field_name): string {
-    return 'REPLACE(REPLACE(REPLACE(REPLACE(' . $field_name . ', " ", ""), "　", ""), "・", ""), "･", "")';
+    $expr = $field_name;
+    foreach (search_symbol_variants() as $char) {
+        $safe_char = str_replace("'", "''", $char);
+        $expr = 'REPLACE(' . $expr . ', \'' . $safe_char . '\', \'\')';
+    }
+    return $expr;
 }
 
 function normalized_search_keyword(string $value): string {
-    return preg_replace('/[\s　・･]+/u', '', $value) ?? '';
+    $value = (string)$value;
+    return preg_replace('/[\p{Z}\p{P}\p{S}]+/u', '', $value) ?? '';
 }
 
 function build_multi_keyword_clause(array $tokens, array $field_names, string $param_prefix, string $match_mode = 'or'): string {
