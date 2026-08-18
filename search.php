@@ -47,8 +47,12 @@ function split_search_keywords(string $value): array {
     return $tokens;
 }
 
-function compact_spaceless_sql(string $field_name): string {
-    return 'REPLACE(REPLACE(' . $field_name . ', " ", ""), "　", "")';
+function normalized_search_sql(string $field_name): string {
+    return 'REPLACE(REPLACE(REPLACE(REPLACE(' . $field_name . ', " ", ""), "　", ""), "・", ""), "･", "")';
+}
+
+function normalized_search_keyword(string $value): string {
+    return preg_replace('/[\s　・･]+/u', '', $value) ?? '';
 }
 
 function build_multi_keyword_clause(array $tokens, array $field_names, string $param_prefix, string $match_mode = 'or'): string {
@@ -61,7 +65,7 @@ function build_multi_keyword_clause(array $tokens, array $field_names, string $p
     foreach ($tokens as $index => $token) {
         $token_terms = [];
         foreach ($field_names as $field_name) {
-            $field_expr = compact_spaceless_sql($field_name);
+            $field_expr = normalized_search_sql($field_name);
             $token_terms[] = $field_expr . ' LIKE :' . $param_prefix . '_' . $index;
         }
         $token_clauses[] = '(' . implode(' OR ', $token_terms) . ')';
@@ -114,7 +118,7 @@ if ($q !== '' && !empty($keyword_tokens)) {
         );
         $magazine_params = [];
         foreach ($keyword_tokens as $index => $keyword_token) {
-            $compact_keyword = preg_replace('/[\s　]+/u', '', $keyword_token);
+            $compact_keyword = normalized_search_keyword($keyword_token);
             $magazine_params[':mag_keyword_' . $index] = '%' . $compact_keyword . '%';
         }
 
@@ -164,7 +168,7 @@ if ($q !== '' && !empty($keyword_tokens)) {
         );
         $work_params = [];
         foreach ($keyword_tokens as $index => $keyword_token) {
-            $compact_keyword = preg_replace('/[\s　]+/u', '', $keyword_token);
+            $compact_keyword = normalized_search_keyword($keyword_token);
             $work_params[':work_keyword_' . $index] = '%' . $compact_keyword . '%';
         }
 
@@ -212,12 +216,12 @@ if ($q !== '' && !empty($keyword_tokens)) {
 
         foreach ($keyword_tokens as $index => $keyword_token) {
             $keyword_kana_likes = kana_like_values($keyword_token);
-            $compact_keyword = preg_replace('/[\s　]+/u', '', $keyword_token);
+            $compact_keyword = normalized_search_keyword($keyword_token);
             $creator_where_clauses[] = "(
-                REPLACE(REPLACE(c.name, ' ', ''), '　', '') LIKE :creator_keyword_{$index}
-                OR REPLACE(REPLACE(c.name_search, ' ', ''), '　', '') LIKE :creator_keyword_{$index}
-                OR REPLACE(REPLACE(c.name, ' ', ''), '　', '') LIKE :creator_keyword_compact_{$index}
-                OR REPLACE(REPLACE(c.name_search, ' ', ''), '　', '') LIKE :creator_keyword_compact_{$index}
+                " . normalized_search_sql('c.name') . " LIKE :creator_keyword_{$index}
+                OR " . normalized_search_sql('c.name_search') . " LIKE :creator_keyword_{$index}
+                OR " . normalized_search_sql('c.name') . " LIKE :creator_keyword_compact_{$index}
+                OR " . normalized_search_sql('c.name_search') . " LIKE :creator_keyword_compact_{$index}
                 OR c.name_kana LIKE :creator_kana_base_{$index}
                 OR c.name_kana LIKE :creator_kana_hira_{$index}
                 OR c.name_kana LIKE :creator_kana_kata_{$index}
