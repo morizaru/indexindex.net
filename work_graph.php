@@ -120,6 +120,15 @@ function redirect_work_graph_url($url): void {
     exit;
 }
 
+function current_work_graph_relative_url(): string {
+    $url = 'work_graph.php';
+    if (!empty($_SERVER['QUERY_STRING'])) {
+        $url .= '?' . $_SERVER['QUERY_STRING'];
+    }
+
+    return $url;
+}
+
 function make_graph_url($publisher_id, $magazine_id, $year, $work_id, $work_q = '', $creator_q = '', $page = 1, $sort = 'title', $order = 'asc', $year_from = 0, $year_to = 0) {
     return build_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
 }
@@ -240,6 +249,7 @@ $year_to      = ii_get_positive_int_param('year_to');
 $work_id      = ii_get_positive_int_param('work_id');
 [$page, $has_page_param, $page_needs_redirect] = ii_get_page_param();
 $per_page     = 100;
+$has_graph = ($work_id > 0);
 
 $allowed_sorts = ['title', 'content_count', 'year'];
 $sort = ii_get_string_param('sort');
@@ -337,6 +347,11 @@ if ($work_id > 0) {
     $selected_work_title = $stmt->fetch()['title'] ?? '';
 }
 
+$work_input_value = $work_q;
+if ($work_input_value === '' && $work_id > 0 && $selected_work_title !== '') {
+    $work_input_value = $selected_work_title;
+}
+
 // 作品一覧用条件
 $list_where = [];
 $list_params = [];
@@ -380,80 +395,19 @@ if (!empty($list_where)) {
 }
 
 // 条件に合う作品数
-$count_sql = "
-    SELECT COUNT(DISTINCT w.id) AS total_count
-    FROM works w
-    JOIN issue_contents ic ON w.id = ic.work_id
-    JOIN magazine_issues mi ON ic.issue_id = mi.id
-    JOIN magazines m ON mi.magazine_id = m.id
-    JOIN publishers p ON m.publisher_id = p.id
-    {$list_where_sql}
-";
-$stmt = $pdo->prepare($count_sql);
-$stmt->execute($list_params);
-$total_count = (int)($stmt->fetch()['total_count'] ?? 0);
-$total_pages = max(1, (int)ceil($total_count / $per_page));
-
-$canonical_page = $page;
-if ($total_count <= 0) {
-    $canonical_page = 1;
-} elseif ($canonical_page > $total_pages) {
-    $canonical_page = $total_pages;
-}
-
-$canonical_relative_url = build_work_graph_url($canonical_page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
-$current_relative_url = 'work_graph.php';
-if (!empty($_SERVER['QUERY_STRING'])) {
-    $current_relative_url .= '?' . $_SERVER['QUERY_STRING'];
-}
-
-if ($page_needs_redirect || $page !== $canonical_page || $current_relative_url !== $canonical_relative_url) {
-    redirect_work_graph_url($canonical_relative_url);
-}
-
-$page = $canonical_page;
-$offset = ($page - 1) * $per_page;
-$from_count = $total_count > 0 ? $offset + 1 : 0;
-$to_count = min($offset + $per_page, $total_count);
+$total_count = 0;
+$total_pages = 1;
+$offset = 0;
+$from_count = 0;
+$to_count = 0;
 $works = [];
 
 // 条件に合う作品一覧：1ページ分だけ取得
-if ($total_count > 0) {
-    $sql = "
-    SELECT
-        w.id,
-        w.title,
-        w.publication_type,
-        COUNT(DISTINCT ic.id) AS content_count,
-        MIN(mi.issue_year) AS first_year,
-        MAX(mi.issue_year) AS last_year,
-        GROUP_CONCAT(DISTINCT p.name ORDER BY p.name SEPARATOR ' / ') AS publisher_names,
-        GROUP_CONCAT(DISTINCT m.name ORDER BY m.name SEPARATOR ' / ') AS magazine_names
-    FROM works w
-    JOIN issue_contents ic ON w.id = ic.work_id
-    JOIN magazine_issues mi ON ic.issue_id = mi.id
-    JOIN magazines m ON mi.magazine_id = m.id
-    JOIN publishers p ON m.publisher_id = p.id
-    {$list_where_sql}
-    GROUP BY w.id, w.title, w.publication_type
-    ORDER BY {$order_by_sql}
-    LIMIT :limit OFFSET :offset
-";
-    $stmt = $pdo->prepare($sql);
-    foreach ($list_params as $key => $value) {
-        $param_type = in_array($key, [':work_q', ':creator_q'], true) ? PDO::PARAM_STR : PDO::PARAM_INT;
-        $stmt->bindValue($key, $value, $param_type);
-    }
-    $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    $stmt->execute();
-    $works = $stmt->fetchAll();
-}
-
 $rows = [];
 $chart_labels = [];
 $chart_values = [];
 $graph_years = [];
+$graph_year_options = [];
 $graph_year_min = 0;
 $graph_year_max = 0;
 
@@ -531,7 +485,17 @@ if ($work_id > 0) {
 }
 
 // グラフ表示は作品が選ばれている時だけ
-$has_graph = ($work_id > 0);
+$graph_year_options = array_map('intval', $graph_years);
+if ($year_from > 0) {
+    $graph_year_options[] = $year_from;
+}
+if ($year_to > 0) {
+    $graph_year_options[] = $year_to;
+}
+$graph_year_options = array_values(array_unique(array_filter($graph_year_options, static function ($value) {
+    return $value > 0;
+})));
+sort($graph_year_options, SORT_NUMERIC);
 
 if ($has_graph) {
     $where = [];
@@ -649,11 +613,80 @@ if ($has_graph) {
     }
 }
 
-if ($has_graph && empty($rows) && $has_page_param) {
-    redirect_work_graph_url(build_work_graph_url(1, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to));
+$suppress_work_list = ($has_graph && empty($rows));
+
+if ($suppress_work_list) {
+    $page = 1;
+    $canonical_relative_url = build_work_graph_url(1, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
+    if ($page_needs_redirect || $has_page_param || current_work_graph_relative_url() !== $canonical_relative_url) {
+        redirect_work_graph_url($canonical_relative_url);
+    }
+} else {
+    $count_sql = "
+        SELECT COUNT(DISTINCT w.id) AS total_count
+        FROM works w
+        JOIN issue_contents ic ON w.id = ic.work_id
+        JOIN magazine_issues mi ON ic.issue_id = mi.id
+        JOIN magazines m ON mi.magazine_id = m.id
+        JOIN publishers p ON m.publisher_id = p.id
+        {$list_where_sql}
+    ";
+    $stmt = $pdo->prepare($count_sql);
+    $stmt->execute($list_params);
+    $total_count = (int)($stmt->fetch()['total_count'] ?? 0);
+    $total_pages = max(1, (int)ceil($total_count / $per_page));
+
+    $canonical_page = $page;
+    if ($total_count <= 0) {
+        $canonical_page = 1;
+    } elseif ($canonical_page > $total_pages) {
+        $canonical_page = $total_pages;
+    }
+
+    $canonical_relative_url = build_work_graph_url($canonical_page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
+    if ($page_needs_redirect || $page !== $canonical_page || current_work_graph_relative_url() !== $canonical_relative_url) {
+        redirect_work_graph_url($canonical_relative_url);
+    }
+
+    $page = $canonical_page;
+    $offset = ($page - 1) * $per_page;
+    $from_count = $total_count > 0 ? $offset + 1 : 0;
+    $to_count = min($offset + $per_page, $total_count);
+
+    if ($total_count > 0) {
+        $sql = "
+            SELECT
+                w.id,
+                w.title,
+                w.publication_type,
+                COUNT(DISTINCT ic.id) AS content_count,
+                MIN(mi.issue_year) AS first_year,
+                MAX(mi.issue_year) AS last_year,
+                GROUP_CONCAT(DISTINCT p.name ORDER BY p.name SEPARATOR ' / ') AS publisher_names,
+                GROUP_CONCAT(DISTINCT m.name ORDER BY m.name SEPARATOR ' / ') AS magazine_names
+            FROM works w
+            JOIN issue_contents ic ON w.id = ic.work_id
+            JOIN magazine_issues mi ON ic.issue_id = mi.id
+            JOIN magazines m ON mi.magazine_id = m.id
+            JOIN publishers p ON m.publisher_id = p.id
+            {$list_where_sql}
+            GROUP BY w.id, w.title, w.publication_type
+            ORDER BY {$order_by_sql}
+            LIMIT :limit OFFSET :offset
+        ";
+        $stmt = $pdo->prepare($sql);
+        foreach ($list_params as $key => $value) {
+            $param_type = in_array($key, [':work_q', ':creator_q'], true) ? PDO::PARAM_STR : PDO::PARAM_INT;
+            $stmt->bindValue($key, $value, $param_type);
+        }
+        $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $works = $stmt->fetchAll();
+    }
 }
 
-$is_zero_result = ($total_count === 0) || ($has_graph && empty($rows));
+$is_zero_result = ($total_count === 0) || $suppress_work_list;
 $canonical_url = build_absolute_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
 ?>
 <!DOCTYPE html>
@@ -664,6 +697,9 @@ $canonical_url = build_absolute_work_graph_url($page, $publisher_id, $magazine_i
         <meta name="robots" content="noindex,follow">
     <?php endif; ?>
     <link rel="canonical" href="<?= h($canonical_url) ?>">
+    <?php if ($suppress_work_list): ?>
+        <style>.container > h2 { display: none; }</style>
+    <?php endif; ?>
     <title>作品連載順グラフ - INDEXINDEX</title>
     <style>
         body {
@@ -1221,6 +1257,10 @@ require_once __DIR__ . '/includes/header.php';
         <?php if ($order !== 'asc'): ?>
             <input type="hidden" name="order" value="<?= h($order) ?>">
         <?php endif; ?>
+        <?php if ($work_id > 0): ?>
+            <input type="hidden" name="work_id" id="work_id" value="<?= h($work_id) ?>">
+            <input type="hidden" id="selected_work_title" value="<?= h($selected_work_title) ?>">
+        <?php endif; ?>
 
         <div class="work-search-row">
             <label>作品検索</label>
@@ -1229,7 +1269,7 @@ require_once __DIR__ . '/includes/header.php';
                 name="work_q"
                 id="work_q"
                 class="work-search-input"
-                value="<?= h($work_q) ?>"
+                value="<?= h($work_input_value) ?>"
                 placeholder="作品名で検索"
                 autocomplete="off"
             >
@@ -1247,6 +1287,31 @@ require_once __DIR__ . '/includes/header.php';
                 autocomplete="off"
             >
         </div>
+
+        <?php if ($work_id > 0 && !empty($graph_year_options)): ?>
+            <div class="graph-year-box">
+                <label>表示年</label>
+                <div class="graph-year-range">
+                    <select name="year_from" id="filter_year_from">
+                        <?php foreach ($graph_year_options as $graph_year): ?>
+                            <option value="<?= h($graph_year) ?>" <?= ((string)$year_from === (string)$graph_year) ? 'selected' : '' ?>>
+                                <?= h($graph_year) ?>年
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <span class="graph-year-separator">〜</span>
+
+                    <select name="year_to" id="filter_year_to">
+                        <?php foreach ($graph_year_options as $graph_year): ?>
+                            <option value="<?= h($graph_year) ?>" <?= ((string)$year_to === (string)$graph_year) ? 'selected' : '' ?>>
+                                <?= h($graph_year) ?>年
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <div class="filter-grid">
 
@@ -1331,7 +1396,7 @@ require_once __DIR__ . '/includes/header.php';
                 このグラフは、登録済みの雑誌号ごとの掲載順をもとに表示しています。掲載順の数字が小さいほど、目次上では前の方に掲載されています。
             </div>
 
-            <?php if (!empty($graph_years)): ?>
+            <?php if (!empty($graph_year_options)): ?>
                 <form method="get" action="work_graph.php" class="graph-year-box">
                     <?php if ($publisher_id > 0): ?>
                         <input type="hidden" name="publisher_id" value="<?= h($publisher_id) ?>">
@@ -1361,7 +1426,7 @@ require_once __DIR__ . '/includes/header.php';
                     <label>表示年</label>
                     <div class="graph-year-range">
                         <select name="year_from" id="graph_year_from">
-                            <?php foreach (array_reverse($graph_years) as $graph_year): ?>
+                            <?php foreach ($graph_year_options as $graph_year): ?>
                                 <option value="<?= h($graph_year) ?>" <?= ((string)$year_from === (string)$graph_year) ? 'selected' : '' ?>>
                                     <?= h($graph_year) ?>年
                                 </option>
@@ -1371,7 +1436,7 @@ require_once __DIR__ . '/includes/header.php';
                         <span class="graph-year-separator">〜</span>
 
                         <select name="year_to" id="graph_year_to">
-                            <?php foreach (array_reverse($graph_years) as $graph_year): ?>
+                            <?php foreach ($graph_year_options as $graph_year): ?>
                                 <option value="<?= h($graph_year) ?>" <?= ((string)$year_to === (string)$graph_year) ? 'selected' : '' ?>>
                                     <?= h($graph_year) ?>年
                                 </option>
@@ -1528,6 +1593,8 @@ require_once __DIR__ . '/includes/header.php';
 
     <h2>作品一覧</h2>
 
+    <?php if (!$suppress_work_list): ?>
+
     <div class="count">
         全<?= h($total_count) ?>作品中 <?= h($from_count) ?>〜<?= h($to_count) ?>件を表示<br>
         <?= h($page) ?> / <?= h($total_pages) ?>ページ、1ページ<?= h($per_page) ?>件
@@ -1608,6 +1675,8 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php endif; ?>
 
+    <?php endif; ?>
+
 </div>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
@@ -1649,6 +1718,25 @@ if (publisherSelect && magazineSelect) {
 
 
     filterMagazinesByPublisher();
+}
+
+const workSearchInput = document.getElementById('work_q');
+const workIdInput = document.getElementById('work_id');
+const selectedWorkTitleInput = document.getElementById('selected_work_title');
+
+if (workSearchInput && workIdInput && selectedWorkTitleInput) {
+    const originalSelectedWorkTitle = selectedWorkTitleInput.value;
+    const originalWorkId = workIdInput.value;
+
+    workSearchInput.addEventListener('input', () => {
+        if (workSearchInput.value !== originalSelectedWorkTitle) {
+            workIdInput.value = '';
+            workIdInput.removeAttribute('name');
+        } else {
+            workIdInput.value = originalWorkId;
+            workIdInput.name = 'work_id';
+        }
+    });
 }
 
 const resultFilter = document.getElementById('resultFilter');
