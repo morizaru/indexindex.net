@@ -12,6 +12,45 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function ii_get_string_param(string $key): string {
+    if (!isset($_GET[$key]) || is_array($_GET[$key])) {
+        return '';
+    }
+
+    return trim((string)$_GET[$key]);
+}
+
+function ii_get_positive_int_param(string $key): int {
+    if (!isset($_GET[$key]) || is_array($_GET[$key])) {
+        return 0;
+    }
+
+    $value = trim((string)$_GET[$key]);
+    if (!preg_match('/^[1-9][0-9]*$/', $value)) {
+        return 0;
+    }
+
+    return (int)$value;
+}
+
+function ii_get_page_param(): array {
+    if (!array_key_exists('page', $_GET)) {
+        return [1, false, false];
+    }
+
+    if (is_array($_GET['page'])) {
+        return [1, true, true];
+    }
+
+    $value = trim((string)$_GET['page']);
+    if (!preg_match('/^[1-9][0-9]*$/', $value)) {
+        return [1, true, true];
+    }
+
+    $page = (int)$value;
+    return [$page, true, $page === 1];
+}
+
 function build_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q = '', $creator_q = '', $sort = 'title', $order = 'asc', $year_from = 0, $year_to = 0) {
     $params = [];
 
@@ -70,6 +109,15 @@ function build_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_i
 
     $query_string = http_build_query($params);
     return 'work_graph.php' . ($query_string !== '' ? '?' . $query_string : '');
+}
+
+function build_absolute_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q = '', $creator_q = '', $sort = 'title', $order = 'asc', $year_from = 0, $year_to = 0) {
+    return 'https://morizaru.net/indexindex/' . build_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
+}
+
+function redirect_work_graph_url($url): void {
+    header('Location: ' . $url, true, 301);
+    exit;
 }
 
 function make_graph_url($publisher_id, $magazine_id, $year, $work_id, $work_q = '', $creator_q = '', $page = 1, $sort = 'title', $order = 'asc', $year_from = 0, $year_to = 0) {
@@ -182,24 +230,27 @@ function sort_mark($sort_key, $current_sort, $current_order) {
     return $current_order === 'desc' ? ' ▼' : ' ▲';
 }
 
-$publisher_id = isset($_GET['publisher_id']) ? (int)$_GET['publisher_id'] : 0;
-$magazine_id  = isset($_GET['magazine_id']) ? (int)$_GET['magazine_id'] : 0;
-$work_q   = isset($_GET['work_q']) ? trim((string)$_GET['work_q']) : '';
-$creator_q = isset($_GET['creator_q']) ? trim((string)$_GET['creator_q']) : '';
-$year         = isset($_GET['year']) ? (int)$_GET['year'] : 0;
-$year_from    = isset($_GET['year_from']) ? (int)$_GET['year_from'] : 0;
-$year_to      = isset($_GET['year_to']) ? (int)$_GET['year_to'] : 0;
-$work_id      = isset($_GET['work_id']) ? (int)$_GET['work_id'] : 0;
-$page         = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$publisher_id = ii_get_positive_int_param('publisher_id');
+$magazine_id  = ii_get_positive_int_param('magazine_id');
+$work_q   = ii_get_string_param('work_q');
+$creator_q = ii_get_string_param('creator_q');
+$year         = ii_get_positive_int_param('year');
+$year_from    = ii_get_positive_int_param('year_from');
+$year_to      = ii_get_positive_int_param('year_to');
+$work_id      = ii_get_positive_int_param('work_id');
+[$page, $has_page_param, $page_needs_redirect] = ii_get_page_param();
 $per_page     = 100;
 
 $allowed_sorts = ['title', 'content_count', 'year'];
-$sort = isset($_GET['sort']) ? (string)$_GET['sort'] : 'title';
+$sort = ii_get_string_param('sort');
+if ($sort === '') {
+    $sort = 'title';
+}
 if (!in_array($sort, $allowed_sorts, true)) {
     $sort = 'title';
 }
 
-$order = isset($_GET['order']) ? strtolower((string)$_GET['order']) : 'asc';
+$order = strtolower(ii_get_string_param('order'));
 $order = $order === 'desc' ? 'desc' : 'asc';
 $order_sql = strtoupper($order);
 
@@ -343,16 +394,32 @@ $stmt->execute($list_params);
 $total_count = (int)($stmt->fetch()['total_count'] ?? 0);
 $total_pages = max(1, (int)ceil($total_count / $per_page));
 
-if ($page > $total_pages) {
-    $page = $total_pages;
+$canonical_page = $page;
+if ($total_count <= 0) {
+    $canonical_page = 1;
+} elseif ($canonical_page > $total_pages) {
+    $canonical_page = $total_pages;
 }
 
+$canonical_relative_url = build_work_graph_url($canonical_page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
+$current_relative_url = 'work_graph.php';
+if (!empty($_SERVER['QUERY_STRING'])) {
+    $current_relative_url .= '?' . $_SERVER['QUERY_STRING'];
+}
+
+if ($page_needs_redirect || $page !== $canonical_page || $current_relative_url !== $canonical_relative_url) {
+    redirect_work_graph_url($canonical_relative_url);
+}
+
+$page = $canonical_page;
 $offset = ($page - 1) * $per_page;
 $from_count = $total_count > 0 ? $offset + 1 : 0;
 $to_count = min($offset + $per_page, $total_count);
+$works = [];
 
 // 条件に合う作品一覧：1ページ分だけ取得
-$sql = "
+if ($total_count > 0) {
+    $sql = "
     SELECT
         w.id,
         w.title,
@@ -372,15 +439,16 @@ $sql = "
     ORDER BY {$order_by_sql}
     LIMIT :limit OFFSET :offset
 ";
-$stmt = $pdo->prepare($sql);
-foreach ($list_params as $key => $value) {
-    $param_type = in_array($key, [':work_q', ':creator_q'], true) ? PDO::PARAM_STR : PDO::PARAM_INT;
-    $stmt->bindValue($key, $value, $param_type);
+    $stmt = $pdo->prepare($sql);
+    foreach ($list_params as $key => $value) {
+        $param_type = in_array($key, [':work_q', ':creator_q'], true) ? PDO::PARAM_STR : PDO::PARAM_INT;
+        $stmt->bindValue($key, $value, $param_type);
+    }
+    $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $works = $stmt->fetchAll();
 }
-$stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt->execute();
-$works = $stmt->fetchAll();
 
 $rows = [];
 $chart_labels = [];
@@ -580,11 +648,22 @@ if ($has_graph) {
         $chart_values[] = (int)$row['sort_order'];
     }
 }
+
+if ($has_graph && empty($rows) && $has_page_param) {
+    redirect_work_graph_url(build_work_graph_url(1, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to));
+}
+
+$is_zero_result = ($total_count === 0) || ($has_graph && empty($rows));
+$canonical_url = build_absolute_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
 ?>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <?php if ($is_zero_result): ?>
+        <meta name="robots" content="noindex,follow">
+    <?php endif; ?>
+    <link rel="canonical" href="<?= h($canonical_url) ?>">
     <title>作品連載順グラフ - INDEXINDEX</title>
     <style>
         body {
