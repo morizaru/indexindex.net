@@ -1,0 +1,73 @@
+作業日時:
+2026-08-20
+
+対象:
+- indexindex/includes/access_logger.php
+- indexindex/admin/access_analytics.php
+- お名前.comアクセスログ 2026-08-19 49.109.101.12 の差分確認
+
+目的:
+お名前.comアクセスログでは 2026-08-19 に 49.109.101.12 が 1,258件ある一方、
+admin/access_analytics.php の Watched Real IP Hash Check では onamae-rank-1 が PV 4 だけに見える原因を調査する。
+
+調査内容:
+1. ワークスペースと添付ファイル内で 49.109.101.12、2026-08-19、19/Aug/2026 を検索した。
+2. access_logger.php の記録対象、除外条件、bot振り分け条件を確認した。
+3. admin/access_analytics.php の Watched Real IP Hash Check が参照しているテーブルと条件を確認した。
+4. indexindex/admin/.htaccess.txt の Basic認証設定を確認した。
+5. 差分確認時に誤読しやすい点を admin/access_analytics.php の Watched Real IP Hash Check に追記した。
+
+確認結果:
+- この環境内には、お名前.comの生アクセスログ本体は見つからなかった。
+- そのため、49.109.101.12 の path別件数、status code別件数、method別件数、User-Agent別件数は実ログから確定できていない。
+- Watched Real IP Hash Check は access_logs テーブルだけを対象にしている。
+- access_logger.php は /indexindex/ 配下、またはサイトルート / と /index.php を原則対象にしている。
+- /indexindex/admin/ 配下は access_logs に記録しない。
+- css, js, png, jpg, jpeg, gif, webp, svg, ico, map, woff, woff2, ttf, eot などの静的ファイルは記録しない。
+- GET/POST 以外の method は記録しない。
+- User-Agent bot判定、攻撃パターン判定、分散bot行動判定、ブロックIPハッシュ判定に該当したアクセスは access_logs へ入らず、access_bot_daily 側へ日別・path別・bot名別で集計される。
+- access_bot_daily にはIP情報がないため、49.109.101.12 が bot側へ入ったかどうかは IP だけでは直接照合できない。
+- indexindex/admin/.htaccess.txt には Basic認証設定があり、実サーバーで .htaccess として有効なら admin 配下への 401 は Basic認証で止まっている可能性が高い。
+
+判断:
+- onamae-rank-1 の PV 4 は「49.109.101.12 のうち access_logs に通常アクセスとして残った件数」と解釈するのが妥当。
+- お名前.com側 1,258件との差分 1,254件は、以下のいずれか、または複合で発生しうる。
+  - /indexindex/admin/ 配下へのアクセス
+  - 静的ファイルへのアクセス
+  - /indexindex/ 以外へのアクセス
+  - GET/POST 以外のアクセス
+  - botまたは攻撃判定により access_bot_daily 側へ集計されたアクセス
+- 生ログが未確認のため、49.109.101.12 をすぐIP拒否する判断はまだできない。
+- adminへの大量アクセスがあり status 401 中心なら Basic認証で止まっていると判断できる。
+- adminへの status 200 が多数ある場合は、Basic認証漏れ、ログ仕様、認証済み操作、または別パスの公開状態を追加調査する必要がある。
+
+必要な対策:
+- 現時点では、IP拒否の本番反映は行っていない。
+- admin/access_analytics.php の Watched Real IP Hash Check に、access_logsのみを見ていること、お名前.com生ログとの差分候補を確認するメモを追加した。
+
+注意点:
+- 49.109.x.x は通常ユーザーの可能性もあるため、path、status、method、User-Agent を確認するまで拒否しない。
+- access_bot_daily はIPを保持しないため、IP単位のbot移動確認はできない。User-Agentとpathの日別集計から推定する。
+- DB接続情報、パスワード、APIキー、saltなどの機密情報はこの記録に含めていない。
+- DELETE操作は実施していない。
+
+今後の対応候補:
+1. お名前.comの 2026-08-19 生アクセスログを取得し、49.109.101.12 のみを抽出して path/status/method/User-Agent 別に集計する。
+2. admin配下が多い場合、status 401 と 200 の内訳を確認する。
+3. 公開ページが多い場合、同日の access_bot_daily の path と User-Agent を照合し、bot分類済みか推定する。
+4. 静的ファイルが多い場合、access_logsとの差分として正常に説明できる。
+5. 迷惑アクセスと判断できた場合のみ、.htaccess でのIP拒否、User-Agent bot分類追加、access_logger.php の除外条件見直しを検討する。
+
+お名前.com生ログ取得後の集計例:
+- path別件数
+- status code別件数
+- method別件数
+- User-Agent別件数
+- /indexindex/ 配下とそれ以外の件数
+- /indexindex/admin/ 配下の件数
+- 静的ファイル拡張子の件数
+
+今回の変更:
+- indexindex/admin/access_analytics.php
+  - Watched Real IP Hash Check に、access_logsのみを対象にすることと、お名前.com生ログとの差分候補を説明するメモを追加した。
+
