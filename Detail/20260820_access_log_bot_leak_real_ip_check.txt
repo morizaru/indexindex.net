@@ -1,0 +1,262 @@
+INDEXINDEX access_logs bot leak / real IP hash check
+
+作業日:
+2026-08-20
+
+対象:
+- indexindex/includes/access_logger.php
+- indexindex/admin/access_analytics.php
+
+背景:
+admin/access_analytics.php で 2026-08-19 を見ると、通常PV 3,522、訪問者数 3,430、UU 3,246 に対して bot アクセス合計 22,353 が出ていた。
+通常ログ側の IP ハッシュ上位は少数PVに分散している一方、外部のアクセス解析で以下の実IPが上位に見えていたため、access_logs に bot 判定漏れや分散型ランキング操作アクセスが混ざっていないか確認する依頼だった。
+
+確認対象実IP:
+- 49.109.101.12
+- 123.50.13.31
+- 49.109.107.97
+
+注意:
+II_ACCESS_LOG_SALT の値、DB接続情報、パスワードはこの記録に書かない。
+
+DB接続確認:
+ローカル環境に mysql.exe は存在した。
+PHP CLI は PATH に存在しなかった。
+
+実行できたこと:
+- app/config.php からDB接続情報と II_ACCESS_LOG_SALT を PowerShell 内で読み取る処理を作成
+- salt + IP から access_logs.ip_hash と同じ SHA-256 を計算する処理を作成
+- mysql.exe で対象日集計と指定IPハッシュ照合を試行
+
+実行できなかったこと:
+ローカル環境から mysql1026.onamae.ne.jp:3306 への接続がタイムアウトした。
+
+結果:
+ERROR 2003 (HY000): Can't connect to MySQL server on 'mysql1026.onamae.ne.jp:3306' (10060)
+
+このため、2026-08-19 の実データに対する SELECT 結果確認、および is_bot=1 への補正UPDATEは未実行。
+
+調査SQL:
+
+1. 指定実IPの ip_hash 照合後、access_logs で確認するSQL
+
+SELECT
+    ip_hash,
+    is_bot,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT visitor_hash) AS uu,
+    COUNT(DISTINCT visitor_session_id) AS session_count,
+    COUNT(DISTINCT path) AS path_count,
+    COUNT(DISTINCT user_agent) AS ua_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+    MIN(access_time) AS first_access,
+    MAX(access_time) AS last_access
+FROM access_logs
+WHERE access_time >= '2026-08-19 00:00:00'
+  AND access_time <  '2026-08-20 00:00:00'
+  AND ip_hash IN (
+      'computed_hash_1',
+      'computed_hash_2',
+      'computed_hash_3'
+  )
+GROUP BY ip_hash, is_bot
+ORDER BY pv DESC;
+
+2. 通常ログに残ったbotらしい User-Agent
+
+SELECT
+    DATE(access_time) AS access_date,
+    user_agent,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT ip_hash) AS ip_count,
+    COUNT(DISTINCT visitor_hash) AS uu,
+    COUNT(DISTINCT visitor_session_id) AS session_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+    MIN(access_time) AS first_access,
+    MAX(access_time) AS last_access
+FROM access_logs
+WHERE access_time >= '2026-08-19 00:00:00'
+  AND access_time <  '2026-08-20 00:00:00'
+  AND is_bot = 0
+  AND (
+      user_agent LIKE '%bot%'
+      OR user_agent LIKE '%crawl%'
+      OR user_agent LIKE '%spider%'
+      OR user_agent LIKE '%slurp%'
+      OR user_agent LIKE '%facebookexternalhit%'
+      OR user_agent LIKE '%meta-externalagent%'
+      OR user_agent LIKE '%ChatGPT-User%'
+      OR user_agent LIKE '%OAI-SearchBot%'
+      OR user_agent LIKE '%DuckDuckBot%'
+      OR user_agent LIKE '%coccocbot%'
+      OR user_agent LIKE '%ShapBot%'
+      OR user_agent LIKE '%HeadlessChrome%'
+      OR user_agent LIKE '%python-requests%'
+      OR user_agent LIKE '%curl/%'
+      OR user_agent LIKE '%Go-http-client%'
+      OR user_agent LIKE '%okhttp%'
+      OR user_agent LIKE '%Scrapy%'
+  )
+GROUP BY DATE(access_time), user_agent
+ORDER BY access_date DESC, pv DESC
+LIMIT 100;
+
+3. 通常ログ側の分散bot疑い
+
+SELECT
+    DATE(access_time) AS access_date,
+    path,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT ip_hash) AS ip_count,
+    COUNT(DISTINCT visitor_hash) AS uu,
+    COUNT(DISTINCT visitor_session_id) AS session_count,
+    COUNT(DISTINCT user_agent) AS ua_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+    MIN(access_time) AS first_access,
+    MAX(access_time) AS last_access
+FROM access_logs
+WHERE access_time >= '2026-08-19 00:00:00'
+  AND access_time <  '2026-08-20 00:00:00'
+  AND is_bot = 0
+GROUP BY DATE(access_time), path
+HAVING pv >= 100
+   AND ip_count >= pv * 0.7
+   AND session_count >= pv * 0.7
+   AND uu >= pv * 0.7
+   AND no_referrer_count >= pv * 0.7
+   AND ua_count <= 10
+ORDER BY access_date DESC, pv DESC
+LIMIT 100;
+
+4. work_id 単位の分散bot疑い
+
+SELECT
+    DATE(access_time) AS access_date,
+    SUBSTRING_INDEX(SUBSTRING_INDEX(query_string, 'work_id=', -1), '&', 1) AS work_id,
+    path,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT ip_hash) AS ip_count,
+    COUNT(DISTINCT visitor_hash) AS uu,
+    COUNT(DISTINCT visitor_session_id) AS session_count,
+    COUNT(DISTINCT user_agent) AS ua_count,
+    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS no_referrer_count,
+    MIN(access_time) AS first_access,
+    MAX(access_time) AS last_access
+FROM access_logs
+WHERE access_time >= '2026-08-19 00:00:00'
+  AND access_time <  '2026-08-20 00:00:00'
+  AND is_bot = 0
+  AND path IN ('/indexindex/work.php', '/indexindex/work_graph.php')
+  AND query_string LIKE '%work_id=%'
+GROUP BY DATE(access_time), work_id, path
+HAVING pv >= 100
+   AND ip_count >= pv * 0.7
+   AND session_count >= pv * 0.7
+   AND uu >= pv * 0.7
+   AND no_referrer_count >= pv * 0.7
+   AND ua_count <= 10
+ORDER BY access_date DESC, pv DESC
+LIMIT 100;
+
+実装した対策:
+
+1. includes/access_logger.php
+
+追加した bot UA 判定:
+- HeadlessChrome
+- python-requests
+- curl/
+- Go-http-client
+- okhttp
+- Scrapy
+
+追加した bot 名分類:
+- Headless Browser
+- Python Requests
+- curl
+- Go HTTP Client
+- okhttp
+- Scrapy
+
+追加した行動判定:
+- Behavior Bot / Public Burst
+
+判定条件:
+- 対象 path は以下に限定
+  - /indexindex/work.php
+  - /indexindex/work_graph.php
+  - /indexindex/ranking.php
+  - /indexindex/search.php
+  - /indexindex/works.php
+- referrer が空
+- 直近60分で同一pathの通常ログが80PV以上
+- referrer 空が85%以上
+- distinct ip_hash がPVの75%以上
+- distinct visitor_hash がPVの75%以上
+- distinct visitor_session_id がPVの75%以上
+- distinct user_agent が8以下
+
+目的:
+既存の Behavior Bot / Distributed と Behavior Bot / Distributed Work の間を補完し、特定 work_id だけではなく通常公開ページ単位で分散・低UA・no-referrerの急増を拾う。
+
+2. admin/access_analytics.php
+
+追加・変更:
+- Behavior Bot / Public Burst を bot 表示分類に追加
+- 対策bot内訳、直近bot対策状況、botページ別アクセス数で Public Burst を表示
+- 通常ログ側の Bot-like User-Agent 検出に HeadlessChrome / python-requests / curl / Go-http-client / okhttp / Scrapy を追加
+- Normal Log Bot-like User-Agent / Behavior Candidates / Work ID Candidates / No-referrer Spike を選択期間 from/to ベースに変更
+- Watched Real IP Hash Check カードを追加
+
+Watched Real IP Hash Check:
+- 画面で指定した期間内で、指定実IPから計算した ip_hash が access_logs に存在するか確認する
+- salt は表示しない
+- 表示するのはラベル、ip_hash先頭16文字、is_bot、PV、UU、session、path数、UA数、referrer空数、first/last
+
+補正UPDATE案:
+今回の環境では実データSELECTができなかったため、UPDATEは未実行。
+実サーバーでSELECT結果を確認してから、対象を限定して実行する。
+
+例1: 明確な bot UA の補正
+
+UPDATE access_logs
+SET is_bot = 1
+WHERE access_time >= '2026-08-19 00:00:00'
+  AND access_time <  '2026-08-20 00:00:00'
+  AND is_bot = 0
+  AND (
+      user_agent LIKE '%HeadlessChrome%'
+      OR user_agent LIKE '%python-requests%'
+      OR user_agent LIKE '%curl/%'
+      OR user_agent LIKE '%Go-http-client%'
+      OR user_agent LIKE '%okhttp%'
+      OR user_agent LIKE '%Scrapy%'
+  );
+
+例2: SELECTで確定した ip_hash のみ補正
+
+UPDATE access_logs
+SET is_bot = 1
+WHERE access_time >= '2026-08-19 00:00:00'
+  AND access_time <  '2026-08-20 00:00:00'
+  AND is_bot = 0
+  AND ip_hash IN ('confirmed_bot_ip_hash_only');
+
+注意:
+- DELETEはしない
+- 実行前に必ず同条件のSELECT COUNT(*)で件数確認する
+- 実IPだけで即ブロックしない
+- 49.109.x.x はモバイルキャリア等の通常ユーザーである可能性もあるため、IP単独での遮断は避ける
+- referrer、UA数、path集中、work_id集中、短時間分散性を合わせて判断する
+
+確認結果:
+- git diff --check は後続確認で実行予定
+- PHP CLI が無いため php -l は未実行
+
+今後の確認:
+- 本番またはDB接続可能な環境で 2026-08-19 を指定し、Watched Real IP Hash Check を確認
+- Normal Log Bot-like User-Agent を確認
+- Normal Log Behavior Candidates を確認
+- Normal Log Work ID Candidates を確認
+- 必要な場合のみ SELECT 件数確認後に is_bot=1 補正UPDATEを実行
+- Public Burst の誤判定がないか access_bot_daily で数日確認

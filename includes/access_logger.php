@@ -131,6 +131,11 @@ if (!function_exists('ii_access_log')) {
             return;
         }
 
+        if (ii_access_is_distributed_public_burst_bot($pdo, $pathOnly, $referrer)) {
+            ii_access_count_bot($pdo, $pathOnly, $ua, 'Behavior Bot / Public Burst');
+            return;
+        }
+
         $statusCode = http_response_code();
         if (!$statusCode || $statusCode < 100) {
             $statusCode = null;
@@ -259,7 +264,7 @@ if (!function_exists('ii_access_log')) {
         if ($ua === '') return false;
 
         return (bool)preg_match(
-            '/serankingbacklinksbot|oai-searchbot|chatgpt-user|trendictionbot|yak\/|linkfluence|duckduckbot|queritbot|google-display-ads-bot|coccocbot|shapbot|duckassistbot|bilateralnavigator|sleepbot|bot|crawl|spider|slurp|bingpreview|meta-externalagent|facebookexternalhit|facebot|line-poker|discordbot|twitterbot|google-inspectiontool|gptbot|amazonbot|claudebot|perplexitybot|applebot|ccbot|dataforseobot|petalbot|bytespider|semrushbot|ahrefsbot|mj12bot|dotbot|yandexbot/i',
+            '/serankingbacklinksbot|oai-searchbot|chatgpt-user|trendictionbot|yak\/|linkfluence|duckduckbot|queritbot|google-display-ads-bot|coccocbot|shapbot|duckassistbot|bilateralnavigator|sleepbot|headlesschrome|python-requests|curl\/|go-http-client|okhttp|scrapy|bot|crawl|spider|slurp|bingpreview|meta-externalagent|facebookexternalhit|facebot|line-poker|discordbot|twitterbot|google-inspectiontool|gptbot|amazonbot|claudebot|perplexitybot|applebot|ccbot|dataforseobot|petalbot|bytespider|semrushbot|ahrefsbot|mj12bot|dotbot|yandexbot/i',
             $ua
         );
     }
@@ -450,6 +455,75 @@ if (!function_exists('ii_access_log')) {
         return is_numeric($workId) ? max(0, (int)$workId) : 0;
     }
 
+    function ii_access_is_distributed_public_burst_bot(PDO $pdo, string $path, ?string $referrer): bool {
+        $targetPaths = [
+            '/indexindex/work.php',
+            '/indexindex/work_graph.php',
+            '/indexindex/ranking.php',
+            '/indexindex/search.php',
+            '/indexindex/works.php',
+        ];
+
+        if (!in_array($path, $targetPaths, true)) {
+            return false;
+        }
+
+        if (trim((string)$referrer) !== '') {
+            return false;
+        }
+
+        try {
+            $stmt = $pdo->prepare("
+                SELECT
+                    COUNT(*) AS pv,
+                    COUNT(DISTINCT ip_hash) AS distinct_ip_count,
+                    COUNT(DISTINCT visitor_hash) AS distinct_visitor_count,
+                    COUNT(DISTINCT visitor_session_id) AS distinct_session_count,
+                    COUNT(DISTINCT user_agent) AS distinct_user_agent_count,
+                    SUM(CASE WHEN referrer IS NULL OR referrer = '' THEN 1 ELSE 0 END) AS empty_referrer_count
+                FROM access_logs
+                WHERE access_time >= (NOW() - INTERVAL 60 MINUTE)
+                  AND path = :path
+                  AND is_bot = 0
+            ");
+            $stmt->execute([
+                ':path' => $path,
+            ]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $pv = (int)($row['pv'] ?? 0);
+            if ($pv < 80) {
+                return false;
+            }
+
+            $distinctIpCount = (int)($row['distinct_ip_count'] ?? 0);
+            $distinctVisitorCount = (int)($row['distinct_visitor_count'] ?? 0);
+            $distinctSessionCount = (int)($row['distinct_session_count'] ?? 0);
+            $distinctUserAgentCount = (int)($row['distinct_user_agent_count'] ?? 0);
+            $emptyReferrerCount = (int)($row['empty_referrer_count'] ?? 0);
+
+            if ($emptyReferrerCount < ($pv * 0.85)) {
+                return false;
+            }
+
+            if ($distinctIpCount < ($pv * 0.75)) {
+                return false;
+            }
+
+            if ($distinctVisitorCount < ($pv * 0.75)) {
+                return false;
+            }
+
+            if ($distinctSessionCount < ($pv * 0.75)) {
+                return false;
+            }
+
+            return $distinctUserAgentCount <= 8;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
     function ii_access_count_bot(PDO $pdo, string $path, string $ua, ?string $botName = null): void {
         if ($botName === null) {
             $botName = ii_access_detect_bot_name($ua);
@@ -531,6 +605,12 @@ if (!function_exists('ii_access_log')) {
         if (stripos($ua, 'DuckAssistBot') !== false) return 'DuckAssistBot';
         if (stripos($ua, 'BilateralNavigator') !== false) return 'BilateralNavigator';
         if (stripos($ua, 'SleepBot') !== false) return 'SleepBot';
+        if (stripos($ua, 'HeadlessChrome') !== false) return 'Headless Browser';
+        if (stripos($ua, 'python-requests') !== false) return 'Python Requests';
+        if (stripos($ua, 'curl/') !== false) return 'curl';
+        if (stripos($ua, 'Go-http-client') !== false) return 'Go HTTP Client';
+        if (stripos($ua, 'okhttp') !== false) return 'okhttp';
+        if (stripos($ua, 'Scrapy') !== false) return 'Scrapy';
         if (stripos($ua, 'GPTBot') !== false) return 'GPTBot';
         if (stripos($ua, 'Amazonbot') !== false) return 'Amazonbot';
         if (stripos($ua, 'ClaudeBot') !== false) return 'ClaudeBot';
