@@ -320,7 +320,8 @@ function split_creator_names($creator_name) {
 
     $creator_name = str_replace(['／', '・'], ['/', '・'], $creator_name);
 
-    $parts = preg_split('/\s*(?:[,、\/]|\s+)\s*/u', $creator_name);
+    // 修正: スペースを区切り文字から除外 (区切り文字は「、」「,」「／」「/」のみ)
+    $parts = preg_split('/\s*[,、\/]\s*/u', $creator_name);
     $names = [];
 
     foreach ($parts as $part) {
@@ -335,6 +336,38 @@ function split_creator_names($creator_name) {
     }
 
     return array_values(array_unique($names));
+}
+
+/**
+ * 作者名の分割結果をデバッグ出力（HTML形式）
+ * 
+ * 修正内容:
+ * - 区切り文字を「、」「,」「／」「/」の4つのみに限定
+ * - スペースは区切り文字から除外（「DJ SPACE」のような名前を保持）
+ * 
+ * @param string $creator_name 入力された作者名
+ * @return string HTML形式のデバッグ出力
+ */
+function debug_split_creator_names($creator_name) {
+    $names = split_creator_names($creator_name);
+    
+    $output = '<div style="background: #f9f9f9; border: 1px solid #ddd; padding: 10px; margin: 5px 0; font-family: monospace; font-size: 12px;">';
+    $output .= '<strong style="color: #333;">【作者名分割デバッグ】</strong><br>';
+    $output .= '<span style="color: #666;">入力: ' . htmlspecialchars($creator_name, ENT_QUOTES, 'UTF-8') . '</span><br>';
+    $output .= '<span style="color: #009900;"><strong>分割結果 (' . count($names) . '件):</strong></span><br>';
+    
+    if (empty($names)) {
+        $output .= '<span style="color: #cc0000;">（分割結果なし）</span>';
+    } else {
+        foreach ($names as $index => $name) {
+            $output .= '<div style="margin-left: 15px; color: #0066cc;">author:' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>';
+        }
+    }
+    
+    $output .= '<br><span style="font-size: 10px; color: #999;">区切り文字: 「、」「,」「／」「/」（スペースは区切りません）</span>';
+    $output .= '</div>';
+    
+    return $output;
 }
 
 function creator_role_labels_bulk() {
@@ -628,6 +661,8 @@ function make_empty_rows() {
 
 $message = '';
 $error = '';
+$debug_info = null;
+$show_debug_logs = false;
 
 $issue_id = isset($_GET['issue_id']) ? (int)$_GET['issue_id'] : 0;
 $rows_input = make_empty_rows();
@@ -635,6 +670,15 @@ $rows_input = make_empty_rows();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['saved']) && $_GET['saved'] === '1') {
     $inserted_count = isset($_GET['inserted']) ? max(0, (int)$_GET['inserted']) : 0;
     $message = $inserted_count . '件の目次データを登録しました。開始ページ順で掲載順を自動更新しました。';
+    
+    // デバッグ情報をセッションから取得（常時出力、表示状態はチェックボックスで制御）
+    if (!empty($_SESSION['debug_splits'])) {
+        $debug_info = $_SESSION['debug_splits'];
+        // デバッグログ表示フラグを確認（POST時のチェック状態をセッションから取得）
+        $show_debug_logs = isset($_SESSION['show_debug_logs']) && $_SESSION['show_debug_logs'] === true;
+        unset($_SESSION['debug_splits']);  // 表示後は削除
+        unset($_SESSION['show_debug_logs']);
+    }
 }
 
 // 目次抽出TOOLから渡されたデータを反映
@@ -709,6 +753,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($posted_rows)) {
         $posted_rows = [];
     }
+
+    // POST時のデバッグログ表示状態を確認（チェックボックス状態）
+    $debug_logs_enabled = isset($_POST['debug_logs_enabled']) && $_POST['debug_logs_enabled'] === '1';
+    
+    // チェック状態をセッションに保存（リダイレクト後に表示制御に使用）
+    $_SESSION['show_debug_logs'] = $debug_logs_enabled;
 
     $rows_input = make_empty_rows();
 
@@ -792,6 +842,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $creator_rows = $creators;
             } else {
                 $creator_rows = build_creator_rows_from_name_bulk($creator_name);
+                
+                // デバッグ情報をセッションに保存（表示用）
+                if (!isset($_SESSION['debug_splits'])) {
+                    $_SESSION['debug_splits'] = [];
+                }
+                $_SESSION['debug_splits'][] = [
+                    'row' => $i + 1,
+                    'input' => $creator_name,
+                    'output' => $creator_rows,
+                    'debug_html' => debug_split_creator_names($creator_name),
+                ];
             }
 
             if (empty($creator_rows)) {
@@ -973,7 +1034,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         unset($_SESSION['toc_extract_rows'], $_SESSION['toc_extract_issue_id']);
 
-        header('Location: content_bulk_add.php?issue_id=' . $issue_id . '&saved=1&inserted=' . $inserted_count);
+        // リダイレクト先URL を作成（デバッグログは常時出力、表示制御はセッションで管理）
+        $redirect_url = 'content_bulk_add.php?issue_id=' . $issue_id . '&saved=1&inserted=' . $inserted_count . '&debug_logs=1';
+        
+        header('Location: ' . $redirect_url);
         exit;
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -1324,6 +1388,13 @@ if ($issue_id > 0) {
         const shouldClearBulkDraft = <?= json_encode(isset($_GET['saved']) && $_GET['saved'] === '1') ?>;
 
         document.addEventListener('DOMContentLoaded', function () {
+            // チェックボックスの状態で隠しフィールドを初期化
+            const checkbox = document.getElementById('toggleDebugLogs');
+            const hiddenField = document.getElementById('debugLogsEnabledField');
+            if (checkbox && hiddenField) {
+                hiddenField.value = checkbox.checked ? '1' : '0';
+            }
+            
             const bulkForm = document.querySelector('form.js-content-bulk-form');
             const issueSelect = document.querySelector('select[name="issue_id"]');
 
@@ -1704,6 +1775,34 @@ if ($issue_id > 0) {
                 }
             });
         });
+        
+        // 詳細ログの表示/非表示を切り替える
+        window.toggleDebugLogs = function() {
+            const checkbox = document.getElementById('toggleDebugLogs');
+            const container = document.getElementById('debugLogsContainer');
+            const hiddenField = document.getElementById('debugLogsEnabledField');
+            
+            if (!checkbox || !hiddenField) return;
+            
+            // 隠しフィールドを更新（チェック状態をPOSTで送信）
+            hiddenField.value = checkbox.checked ? '1' : '0';
+            
+            if (!container) return;  // ログコンテナがない場合はここで終了
+            
+            if (checkbox.checked) {
+                container.style.display = 'block';
+                // URLにdebug_logs=1を追加（リロード時に状態を保持）
+                const url = new URL(window.location);
+                url.searchParams.set('debug_logs', '1');
+                window.history.replaceState({}, '', url.toString());
+            } else {
+                container.style.display = 'none';
+                // URLからdebug_logsパラメータを削除
+                const url = new URL(window.location);
+                url.searchParams.delete('debug_logs');
+                window.history.replaceState({}, '', url.toString());
+            }
+        };
     </script>
 </head>
 <body>
@@ -1722,6 +1821,15 @@ if ($issue_id > 0) {
         <?php endif; ?>
     </div>
 
+    <!-- 詳細ログ表示の切り替え（常に表示） -->
+    <div style="margin: 15px 0; padding: 10px; background: #f5f5f5; border: 1px solid #ddd;">
+        <label style="cursor: pointer; user-select: none;">
+            <input type="checkbox" id="toggleDebugLogs" onchange="toggleDebugLogs()" 
+                <?= $show_debug_logs ? 'checked' : '' ?>>
+            <strong style="color: #333;">詳細ログを表示（作者名分割処理）</strong>
+        </label>
+    </div>
+    
     <?php if ($message !== ''): ?>
         <div class="message">
             <?= h($message) ?><br>
@@ -1731,9 +1839,36 @@ if ($issue_id > 0) {
             <?php endif; ?>
         </div>
     <?php endif; ?>
+    
+    <!-- デバッグ情報表示エリア（登録後のみ、チェック状態に応じて表示） -->
+    <?php if (!empty($debug_info)): ?>
+        <div id="debugLogsContainer" style="<?= $show_debug_logs ? '' : 'display: none;' ?>">
+            <div style="background: #f0f0f0; border: 2px solid #666; padding: 15px; margin: 20px 0;">
+                <h3 style="color: #333; margin-top: 0;">【詳細：作者名分割処理ログ】</h3>
+                <p style="color: #666; font-size: 12px; margin: 5px 0;">
+                    区切り文字：「、」「,」「／」「/」（スペースは区切りません）<br>
+                    全 <?= count($debug_info) ?> 件の作者名を処理しました
+                </p>
+                <?php foreach ($debug_info as $debug): ?>
+                    <div style="background: #fff; border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+                        <strong style="color: #0066cc;">行 <?= $debug['row'] ?>:</strong>
+                        <span style="color: #333;">入力値: <code style="background: #f5f5f5; padding: 2px 5px;"><?= htmlspecialchars($debug['input'], ENT_QUOTES, 'UTF-8') ?></code></span>
+                        <?= $debug['debug_html'] ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <?php if ($error !== ''): ?>
         <div class="error"><?= h($error) ?></div>
+    <?php endif; ?>
+    
+    <!-- 登録前ユーザーへの説明 -->
+    <?php if ($message === ''): ?>
+        <p style="color: #999; font-size: 12px; margin-top: 10px;">
+            💡 チェックボックスをONにすると、登録後に作者名の分割処理ログが表示されます
+        </p>
     <?php endif; ?>
 
     <?php if ($selected_issue): ?>
@@ -1755,6 +1890,8 @@ if ($issue_id > 0) {
     <?php endif; ?>
 
     <form method="post" action="content_bulk_add.php<?= ($issue_id > 0) ? '?issue_id=' . h($issue_id) : '' ?>" class="js-content-bulk-form">
+        <!-- デバッグログ表示状態をPOSTで送信（チェックボックスの状態を保持） -->
+        <input type="hidden" id="debugLogsEnabledField" name="debug_logs_enabled" value="0">
 
         <div class="form-row">
             <label>
