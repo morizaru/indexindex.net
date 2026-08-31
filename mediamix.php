@@ -18,6 +18,7 @@ function mediamix_type_labels() {
         'web_anime' => 'Webアニメ',
         'tv_drama' => 'TVドラマ',
         'live_action_movie' => '実写映画',
+        'original_video' => 'OV',
         'web_drama' => 'WEBドラマ',
         'stage' => '舞台',
         'ova' => 'OVA',
