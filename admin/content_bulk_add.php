@@ -662,6 +662,7 @@ function make_empty_rows() {
 $message = '';
 $error = '';
 $debug_info = null;
+$show_debug_logs = false;
 
 $issue_id = isset($_GET['issue_id']) ? (int)$_GET['issue_id'] : 0;
 $rows_input = make_empty_rows();
@@ -670,10 +671,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['saved']) && $_GET['sav
     $inserted_count = isset($_GET['inserted']) ? max(0, (int)$_GET['inserted']) : 0;
     $message = $inserted_count . '件の目次データを登録しました。開始ページ順で掲載順を自動更新しました。';
     
-    // デバッグ情報をセッションから取得して表示
-    if (!empty($_SESSION['debug_splits'])) {
+    // デバッグログ表示フラグを確認（チェックボックス状態）
+    $show_debug_logs = isset($_GET['debug_logs']) && $_GET['debug_logs'] === '1';
+    
+    // デバッグ情報をセッションから取得
+    if (!empty($_SESSION['debug_splits']) && $show_debug_logs) {
         $debug_info = $_SESSION['debug_splits'];
         unset($_SESSION['debug_splits']);  // 表示後は削除
+    } elseif (!empty($_SESSION['debug_splits'])) {
+        // チェックなしの場合は削除するだけ
+        unset($_SESSION['debug_splits']);
     }
 }
 
@@ -749,6 +756,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($posted_rows)) {
         $posted_rows = [];
     }
+
+    // POST時のデバッグログ表示状態を確認
+    $debug_logs_enabled = isset($_POST['debug_logs_enabled']) && $_POST['debug_logs_enabled'] === '1';
 
     $rows_input = make_empty_rows();
 
@@ -1024,7 +1034,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         unset($_SESSION['toc_extract_rows'], $_SESSION['toc_extract_issue_id']);
 
-        header('Location: content_bulk_add.php?issue_id=' . $issue_id . '&saved=1&inserted=' . $inserted_count);
+        // リダイレクト先URL を作成（POST時のデバッグログ状態を保持）
+        $redirect_url = 'content_bulk_add.php?issue_id=' . $issue_id . '&saved=1&inserted=' . $inserted_count;
+        if ($debug_logs_enabled) {
+            $redirect_url .= '&debug_logs=1';
+        }
+        
+        header('Location: ' . $redirect_url);
         exit;
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -1375,6 +1391,13 @@ if ($issue_id > 0) {
         const shouldClearBulkDraft = <?= json_encode(isset($_GET['saved']) && $_GET['saved'] === '1') ?>;
 
         document.addEventListener('DOMContentLoaded', function () {
+            // チェックボックスの状態で隠しフィールドを初期化
+            const checkbox = document.getElementById('toggleDebugLogs');
+            const hiddenField = document.getElementById('debugLogsEnabledField');
+            if (checkbox && hiddenField) {
+                hiddenField.value = checkbox.checked ? '1' : '0';
+            }
+            
             const bulkForm = document.querySelector('form.js-content-bulk-form');
             const issueSelect = document.querySelector('select[name="issue_id"]');
 
@@ -1755,6 +1778,34 @@ if ($issue_id > 0) {
                 }
             });
         });
+        
+        // 詳細ログの表示/非表示を切り替える
+        window.toggleDebugLogs = function() {
+            const checkbox = document.getElementById('toggleDebugLogs');
+            const container = document.getElementById('debugLogsContainer');
+            const hiddenField = document.getElementById('debugLogsEnabledField');
+            
+            if (!checkbox || !hiddenField) return;
+            
+            // 隠しフィールドを更新（チェック状態をPOSTで送信）
+            hiddenField.value = checkbox.checked ? '1' : '0';
+            
+            if (!container) return;  // ログコンテナがない場合はここで終了
+            
+            if (checkbox.checked) {
+                container.style.display = 'block';
+                // URLにdebug_logs=1を追加（リロード時に状態を保持）
+                const url = new URL(window.location);
+                url.searchParams.set('debug_logs', '1');
+                window.history.replaceState({}, '', url.toString());
+            } else {
+                container.style.display = 'none';
+                // URLからdebug_logsパラメータを削除
+                const url = new URL(window.location);
+                url.searchParams.delete('debug_logs');
+                window.history.replaceState({}, '', url.toString());
+            }
+        };
     </script>
 </head>
 <body>
@@ -1773,6 +1824,15 @@ if ($issue_id > 0) {
         <?php endif; ?>
     </div>
 
+    <!-- 詳細ログ表示の切り替え（常に表示） -->
+    <div style="margin: 15px 0; padding: 10px; background: #f5f5f5; border: 1px solid #ddd;">
+        <label style="cursor: pointer; user-select: none;">
+            <input type="checkbox" id="toggleDebugLogs" onchange="toggleDebugLogs()" 
+                <?= $show_debug_logs ? 'checked' : '' ?>>
+            <strong style="color: #333;">詳細ログを表示（作者名分割処理）</strong>
+        </label>
+    </div>
+    
     <?php if ($message !== ''): ?>
         <div class="message">
             <?= h($message) ?><br>
@@ -1781,8 +1841,11 @@ if ($issue_id > 0) {
                 <a href="../issue.php?id=<?= h($issue_id) ?>" target="_blank">公開ページを開く</a>
             <?php endif; ?>
         </div>
-        
-        <?php if (!empty($debug_info)): ?>
+    <?php endif; ?>
+    
+    <!-- デバッグ情報表示エリア（登録後のみ、チェック状態に応じて表示） -->
+    <?php if (!empty($debug_info)): ?>
+        <div id="debugLogsContainer" style="<?= $show_debug_logs ? '' : 'display: none;' ?>">
             <div style="background: #f0f0f0; border: 2px solid #666; padding: 15px; margin: 20px 0;">
                 <h3 style="color: #333; margin-top: 0;">【詳細：作者名分割処理ログ】</h3>
                 <p style="color: #666; font-size: 12px; margin: 5px 0;">
@@ -1797,11 +1860,18 @@ if ($issue_id > 0) {
                     </div>
                 <?php endforeach; ?>
             </div>
-        <?php endif; ?>
+        </div>
     <?php endif; ?>
 
     <?php if ($error !== ''): ?>
         <div class="error"><?= h($error) ?></div>
+    <?php endif; ?>
+    
+    <!-- 登録前ユーザーへの説明 -->
+    <?php if ($message === ''): ?>
+        <p style="color: #999; font-size: 12px; margin-top: 10px;">
+            💡 チェックボックスをONにすると、登録後に作者名の分割処理ログが表示されます
+        </p>
     <?php endif; ?>
 
     <?php if ($selected_issue): ?>
@@ -1823,6 +1893,8 @@ if ($issue_id > 0) {
     <?php endif; ?>
 
     <form method="post" action="content_bulk_add.php<?= ($issue_id > 0) ? '?issue_id=' . h($issue_id) : '' ?>" class="js-content-bulk-form">
+        <!-- デバッグログ表示状態をPOSTで送信（チェックボックスの状態を保持） -->
+        <input type="hidden" id="debugLogsEnabledField" name="debug_logs_enabled" value="0">
 
         <div class="form-row">
             <label>
