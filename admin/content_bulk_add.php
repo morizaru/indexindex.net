@@ -320,7 +320,8 @@ function split_creator_names($creator_name) {
 
     $creator_name = str_replace(['／', '・'], ['/', '・'], $creator_name);
 
-    $parts = preg_split('/\s*(?:[,、\/]|\s+)\s*/u', $creator_name);
+    // 修正: スペースを区切り文字から除外 (区切り文字は「、」「,」「／」「/」のみ)
+    $parts = preg_split('/\s*[,、\/]\s*/u', $creator_name);
     $names = [];
 
     foreach ($parts as $part) {
@@ -335,6 +336,38 @@ function split_creator_names($creator_name) {
     }
 
     return array_values(array_unique($names));
+}
+
+/**
+ * 作者名の分割結果をデバッグ出力（HTML形式）
+ * 
+ * 修正内容:
+ * - 区切り文字を「、」「,」「／」「/」の4つのみに限定
+ * - スペースは区切り文字から除外（「DJ SPACE」のような名前を保持）
+ * 
+ * @param string $creator_name 入力された作者名
+ * @return string HTML形式のデバッグ出力
+ */
+function debug_split_creator_names($creator_name) {
+    $names = split_creator_names($creator_name);
+    
+    $output = '<div style="background: #f9f9f9; border: 1px solid #ddd; padding: 10px; margin: 5px 0; font-family: monospace; font-size: 12px;">';
+    $output .= '<strong style="color: #333;">【作者名分割デバッグ】</strong><br>';
+    $output .= '<span style="color: #666;">入力: ' . htmlspecialchars($creator_name, ENT_QUOTES, 'UTF-8') . '</span><br>';
+    $output .= '<span style="color: #009900;"><strong>分割結果 (' . count($names) . '件):</strong></span><br>';
+    
+    if (empty($names)) {
+        $output .= '<span style="color: #cc0000;">（分割結果なし）</span>';
+    } else {
+        foreach ($names as $index => $name) {
+            $output .= '<div style="margin-left: 15px; color: #0066cc;">author:' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>';
+        }
+    }
+    
+    $output .= '<br><span style="font-size: 10px; color: #999;">区切り文字: 「、」「,」「／」「/」（スペースは区切りません）</span>';
+    $output .= '</div>';
+    
+    return $output;
 }
 
 function creator_role_labels_bulk() {
@@ -628,6 +661,7 @@ function make_empty_rows() {
 
 $message = '';
 $error = '';
+$debug_info = null;
 
 $issue_id = isset($_GET['issue_id']) ? (int)$_GET['issue_id'] : 0;
 $rows_input = make_empty_rows();
@@ -635,6 +669,12 @@ $rows_input = make_empty_rows();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['saved']) && $_GET['saved'] === '1') {
     $inserted_count = isset($_GET['inserted']) ? max(0, (int)$_GET['inserted']) : 0;
     $message = $inserted_count . '件の目次データを登録しました。開始ページ順で掲載順を自動更新しました。';
+    
+    // デバッグ情報をセッションから取得して表示
+    if (!empty($_SESSION['debug_splits'])) {
+        $debug_info = $_SESSION['debug_splits'];
+        unset($_SESSION['debug_splits']);  // 表示後は削除
+    }
 }
 
 // 目次抽出TOOLから渡されたデータを反映
@@ -792,6 +832,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $creator_rows = $creators;
             } else {
                 $creator_rows = build_creator_rows_from_name_bulk($creator_name);
+                
+                // デバッグ情報をセッションに保存（表示用）
+                if (!isset($_SESSION['debug_splits'])) {
+                    $_SESSION['debug_splits'] = [];
+                }
+                $_SESSION['debug_splits'][] = [
+                    'row' => $i + 1,
+                    'input' => $creator_name,
+                    'output' => $creator_rows,
+                    'debug_html' => debug_split_creator_names($creator_name),
+                ];
             }
 
             if (empty($creator_rows)) {
@@ -1730,6 +1781,23 @@ if ($issue_id > 0) {
                 <a href="../issue.php?id=<?= h($issue_id) ?>" target="_blank">公開ページを開く</a>
             <?php endif; ?>
         </div>
+        
+        <?php if (!empty($debug_info)): ?>
+            <div style="background: #f0f0f0; border: 2px solid #666; padding: 15px; margin: 20px 0;">
+                <h3 style="color: #333; margin-top: 0;">【詳細：作者名分割処理ログ】</h3>
+                <p style="color: #666; font-size: 12px; margin: 5px 0;">
+                    区切り文字：「、」「,」「／」「/」（スペースは区切りません）<br>
+                    全 <?= count($debug_info) ?> 件の作者名を処理しました
+                </p>
+                <?php foreach ($debug_info as $debug): ?>
+                    <div style="background: #fff; border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+                        <strong style="color: #0066cc;">行 <?= $debug['row'] ?>:</strong>
+                        <span style="color: #333;">入力値: <code style="background: #f5f5f5; padding: 2px 5px;"><?= htmlspecialchars($debug['input'], ENT_QUOTES, 'UTF-8') ?></code></span>
+                        <?= $debug['debug_html'] ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
     <?php endif; ?>
 
     <?php if ($error !== ''): ?>
