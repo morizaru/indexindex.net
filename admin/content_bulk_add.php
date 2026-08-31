@@ -671,16 +671,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['saved']) && $_GET['sav
     $inserted_count = isset($_GET['inserted']) ? max(0, (int)$_GET['inserted']) : 0;
     $message = $inserted_count . '件の目次データを登録しました。開始ページ順で掲載順を自動更新しました。';
     
-    // デバッグログ表示フラグを確認（チェックボックス状態）
-    $show_debug_logs = isset($_GET['debug_logs']) && $_GET['debug_logs'] === '1';
-    
-    // デバッグ情報をセッションから取得
-    if (!empty($_SESSION['debug_splits']) && $show_debug_logs) {
+    // デバッグ情報をセッションから取得（常時出力、表示状態はチェックボックスで制御）
+    if (!empty($_SESSION['debug_splits'])) {
         $debug_info = $_SESSION['debug_splits'];
+        // デバッグログ表示フラグを確認（POST時のチェック状態をセッションから取得）
+        $show_debug_logs = isset($_SESSION['show_debug_logs']) && $_SESSION['show_debug_logs'] === true;
         unset($_SESSION['debug_splits']);  // 表示後は削除
-    } elseif (!empty($_SESSION['debug_splits'])) {
-        // チェックなしの場合は削除するだけ
-        unset($_SESSION['debug_splits']);
+        unset($_SESSION['show_debug_logs']);
     }
 }
 
@@ -757,8 +754,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $posted_rows = [];
     }
 
-    // POST時のデバッグログ表示状態を確認
+    // POST時のデバッグログ表示状態を確認（チェックボックス状態）
     $debug_logs_enabled = isset($_POST['debug_logs_enabled']) && $_POST['debug_logs_enabled'] === '1';
+    
+    // チェック状態をセッションに保存（リダイレクト後に表示制御に使用）
+    $_SESSION['show_debug_logs'] = $debug_logs_enabled;
 
     $rows_input = make_empty_rows();
 
@@ -1034,11 +1034,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         unset($_SESSION['toc_extract_rows'], $_SESSION['toc_extract_issue_id']);
 
-        // リダイレクト先URL を作成（POST時のデバッグログ状態を保持）
-        $redirect_url = 'content_bulk_add.php?issue_id=' . $issue_id . '&saved=1&inserted=' . $inserted_count;
-        if ($debug_logs_enabled) {
-            $redirect_url .= '&debug_logs=1';
-        }
+        // リダイレクト先URL を作成（デバッグログは常時出力、表示制御はセッションで管理）
+        $redirect_url = 'content_bulk_add.php?issue_id=' . $issue_id . '&saved=1&inserted=' . $inserted_count . '&debug_logs=1';
         
         header('Location: ' . $redirect_url);
         exit;
