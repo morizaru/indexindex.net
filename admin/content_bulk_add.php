@@ -53,19 +53,40 @@ function validate_episode_no_bulk($value, $row_number) {
 // 一括登録の入力行数
 const BULK_ROW_COUNT = 40;
 
-// 指定した雑誌号の目次を開始ページ順で並べ直し、掲載順を 1,2,3... に振り直す
+// 指定した雑誌号の目次を開始ページ順＋入力No順で並べ直し、掲載順を 1,2,3... に振り直す
 function renumber_issue_contents($pdo, $issue_id) {
-    $stmt = $pdo->prepare("
-        SELECT id
+    $stmt_count = $pdo->prepare("
+        SELECT
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN page_start IS NULL THEN 0 ELSE 1 END) AS page_count
         FROM issue_contents
         WHERE issue_id = :issue_id
-        ORDER BY
+    ");
+    $stmt_count->execute([
+        ':issue_id' => $issue_id
+    ]);
+    $counts = $stmt_count->fetch();
+    $page_count = (int)($counts['page_count'] ?? 0);
+
+    if ($page_count === 0) {
+        $order_sql = "sort_order ASC, id ASC";
+    } else {
+        $order_sql = "
             CASE
                 WHEN page_start IS NULL THEN 1
                 ELSE 0
             END ASC,
             page_start ASC,
+            sort_order ASC,
             id ASC
+        ";
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT id
+        FROM issue_contents
+        WHERE issue_id = :issue_id
+        ORDER BY " . $order_sql . "
     ");
     $stmt->execute([
         ':issue_id' => $issue_id
@@ -877,10 +898,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception(($i + 1) . '行目：作者名を入力してください。');
             }
 
-            if ($page_start === '') {
-                throw new Exception(($i + 1) . '行目：開始ページを入力してください。');
-            }
-
             if (!empty($creators)) {
                 $creator_rows = $creators;
             } else {
@@ -927,6 +944,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $valid_rows[] = [
                 'page_start' => $page_start,
+                'input_order' => $i + 1,
                 'work_id' => $work_id,
                 'title_main' => $title_main,
                 'creator_name' => $creator_name,
@@ -1002,7 +1020,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([
                 ':issue_id' => $issue_id,
                 ':work_id' => $work_id,
-                ':sort_order' => 999999,
+                ':sort_order' => (int)$row['input_order'],
                 ':page_start' => ($row['page_start'] !== '') ? (int)$row['page_start'] : null,
                 ':title_main' => $row['title_main'],
                 ':episode_no' => ($row['episode_no'] !== '') ? $row['episode_no'] : null,

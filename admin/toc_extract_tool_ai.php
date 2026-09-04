@@ -936,7 +936,7 @@ function remove_unneeded_note_tokens($note) {
     $kept = [];
     foreach ($parts as $part) {
         $part = mb_trim($part);
-        if ($part === '' || preg_match('/^(モノクロ|白黒|通常カラーなし|color|カラー)$/iu', $part)) {
+        if ($part === '' || preg_match('/^(モノクロ|白黒|通常カラーなし|color|カラー|掲載ページ数記載なし|ページ数記載なし|ページ数不明)$/iu', $part)) {
             continue;
         }
         if (preg_match('/^(読切|読み切り|読切り)$/u', $part)) {
@@ -1239,6 +1239,9 @@ function normalize_ai_toc_rows($decodedRows) {
         $note = remove_unneeded_note_tokens($r['note'] ?? '');
         $colorType = normalize_alnum_space(mb_trim($r['color_type'] ?? ''));
         $pageCount = normalize_alnum_space(mb_trim($r['page_count'] ?? ''));
+        if (preg_match('/記載なし|不明|なし/u', $pageCount)) {
+            $pageCount = '';
+        }
         $publicationType = normalize_alnum_space(mb_trim($r['publication_type'] ?? ''));
         $raw = normalize_alnum_space(mb_trim($r['raw'] ?? ''));
         $confidence = in_array(($r['confidence'] ?? ''), ['high', 'medium', 'low'], true) ? $r['confidence'] : 'medium';
@@ -1339,7 +1342,7 @@ function call_ai_toc_image_extract($image, $issue, $work_titles = []) {
         '読切/読み切りの表記がある作品は is_one_shot=1 にし、note には読切/読み切りを入れないでください。',
         '巻頭カラーの文字がある場合だけ note/color_type は「巻頭カラー」にしてください。巻頭カラー以外のカラー表記、カラー扉、カラー付き表記、巻中カラー、センターカラーは「センターカラー」に正規化してください。',
         '備考に「モノクロ」「白黒」「color」「カラー」のような曖昧またはカラーでないことだけを示す表記は入れないでください。',
-        '掲載ページ数は note にも分かる形で保持してください。',
+        '掲載ページ数が明記されている場合だけ note にも分かる形で保持してください。掲載ページ数が見つからない場合、page_count と note には「掲載ページ数記載なし」「ページ数不明」などを書かず空文字にしてください。',
         '作品紹介文やあらすじをタイトルへ混入させないでください。',
         'プレゼント、広告、投稿募集、お知らせ、インタビュー、次号予告、読者コーナーなどは漫画作品として登録しないでください。',
         'ページ番号と掲載ページ数を混同しないでください。start_page は開始ページ、page_count は掲載ページ数です。',
