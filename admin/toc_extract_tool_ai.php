@@ -8,8 +8,24 @@ require_once __DIR__ . '/../app/config.php';
 
 $issue_id = isset($_GET['issue_id']) ? (int)$_GET['issue_id'] : 0;
 $errors = [];
+$messages = [];
 $raw_text = '';
 $rows = [];
+$uploaded_image = $_SESSION['toc_extract_image'] ?? null;
+
+if (empty($_SESSION['toc_extract_csrf_token'])) {
+    $_SESSION['toc_extract_csrf_token'] = bin2hex(random_bytes(32));
+}
+
+function csrf_token_toc_extract() {
+    return $_SESSION['toc_extract_csrf_token'] ?? '';
+}
+
+function validate_csrf_toc_extract() {
+    return isset($_POST['csrf_token'])
+        && is_string($_POST['csrf_token'])
+        && hash_equals($_SESSION['toc_extract_csrf_token'] ?? '', $_POST['csrf_token']);
+}
 
 function h($s) {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
@@ -652,6 +668,244 @@ function normalize_creators_json($json) {
     return $items;
 }
 
+function normalize_creators_from_post($value) {
+    if (!is_array($value)) {
+        return [];
+    }
+
+    $items = [];
+    foreach ($value as $creator) {
+        if (!is_array($creator)) {
+            continue;
+        }
+
+        $name = normalize_alnum_space(mb_trim($creator['name'] ?? ''));
+        $role = normalize_alnum_space(mb_trim($creator['role'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+        if ($role === '') {
+            $role = '作者';
+        }
+
+        $items[] = ['name' => $name, 'role' => $role];
+    }
+
+    return $items;
+}
+
+function load_issue_for_toc_extract($pdo, $issue_id) {
+    if ($issue_id <= 0) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT
+            mi.id,
+            mi.magazine_id,
+            mi.issue_label,
+            mi.release_date,
+            mi.issue_no,
+            m.name AS magazine_name,
+            p.name AS publisher_name
+        FROM magazine_issues mi
+        JOIN magazines m ON mi.magazine_id = m.id
+        JOIN publishers p ON m.publisher_id = p.id
+        WHERE mi.id = :id
+        LIMIT 1
+    ");
+    $stmt->execute([':id' => $issue_id]);
+    $issue = $stmt->fetch();
+
+    return $issue ?: null;
+}
+
+function load_issues_for_toc_extract($pdo) {
+    $stmt = $pdo->query("
+        SELECT
+            mi.id,
+            mi.issue_label,
+            mi.release_date,
+            mi.issue_no,
+            m.name AS magazine_name,
+            p.name AS publisher_name
+        FROM magazine_issues mi
+        JOIN magazines m ON mi.magazine_id = m.id
+        JOIN publishers p ON m.publisher_id = p.id
+        WHERE mi.status IN ('approved', 'in_progress', 'verified')
+        ORDER BY
+            CASE
+                WHEN mi.publication_date IS NOT NULL
+                     AND mi.publication_date <> ''
+                     AND mi.publication_date <> '0000-00-00'
+                THEN mi.publication_date
+                WHEN mi.release_date IS NOT NULL
+                     AND mi.release_date <> ''
+                     AND mi.release_date <> '0000-00-00'
+                THEN mi.release_date
+                ELSE '9999-12-31'
+            END DESC,
+            mi.id DESC
+    ");
+
+    return $stmt->fetchAll();
+}
+
+function toc_extract_magazine_settings($magazine_id) {
+    $common = [
+        'reading_direction' => 'natural',
+        'column_order' => 'auto',
+        'text_direction' => 'auto',
+        'title_position' => 'auto',
+        'creator_position' => 'auto',
+        'page_number_position' => 'auto',
+        'note_position' => 'auto',
+        'exclude_keywords' => ['プレゼント', '広告', '投稿募集', 'お知らせ', 'インタビュー', '次号予告', '読者コーナー'],
+        'special_symbols' => ['新連載', '最終回', '読切', '出張掲載', '巻頭カラー', '巻中カラー', 'センターカラー'],
+        'additional_instruction' => '',
+    ];
+
+    $byMagazine = [
+        // magazine_id が確認できたら、ここにマーガレット形式の実IDを追加する。
+        // 例: 123 => ['column_order' => 'right_to_left', 'text_direction' => 'vertical']
+        'margaret_format' => [
+            'column_order' => 'right_to_left',
+            'text_direction' => 'vertical',
+            'additional_instruction' => 'マーガレット系の目次では縦書き・複数段組の可能性を優先し、右列から左列の自然な掲載順を慎重に判断してください。',
+        ],
+    ];
+
+    if (isset($byMagazine[(int)$magazine_id])) {
+        return array_merge($common, $byMagazine[(int)$magazine_id]);
+    }
+
+    return $common;
+}
+
+function log_toc_extract_api_error($issue_id, $type, $status = null, $summary = '', $request_id = '') {
+    $line = sprintf(
+        "[%s] toc_extract_tool_ai issue_id=%d type=%s http_status=%s request_id=%s summary=%s\n",
+        date('c'),
+        (int)$issue_id,
+        preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$type),
+        ($status === null ? '' : (string)(int)$status),
+        preg_replace('/[^\w\-\.]/', '', (string)$request_id),
+        str_replace(["\r", "\n"], ' ', mb_substr((string)$summary, 0, 300, 'UTF-8'))
+    );
+
+    $logFile = __DIR__ . '/../work/toc_extract_ai_errors.log';
+    if (is_dir(dirname($logFile)) && is_writable(dirname($logFile))) {
+        error_log($line, 3, $logFile);
+        return;
+    }
+
+    error_log($line);
+}
+
+function upload_toc_extract_image($pdo, $issue_id) {
+    if ($issue_id <= 0) {
+        throw new RuntimeException('雑誌号を選択してください。');
+    }
+
+    if (!isset($_FILES['toc_image']) || $_FILES['toc_image']['error'] === UPLOAD_ERR_NO_FILE) {
+        throw new RuntimeException('画像が選択されていません。');
+    }
+
+    $file = $_FILES['toc_image'];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('画像アップロードでエラーが発生しました。');
+    }
+
+    if ((int)$file['size'] > 5 * 1024 * 1024) {
+        throw new RuntimeException('画像サイズは5MB以下にしてください。');
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($file['tmp_name']);
+    $allowed = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+    ];
+
+    if (!isset($allowed[$mime])) {
+        throw new RuntimeException('非対応ファイルです。JPG / JPEG / PNG / WEBP の画像を選択してください。');
+    }
+
+    $uploadDir = __DIR__ . '/../uploads/source_images/';
+    $realBase = realpath(__DIR__ . '/..');
+    if ($realBase === false) {
+        throw new RuntimeException('画像保存先を確認できませんでした。');
+    }
+
+    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+        throw new RuntimeException('画像保存先を作成できませんでした。');
+    }
+
+    $realUploadDir = realpath($uploadDir);
+    if ($realUploadDir === false || strpos($realUploadDir, $realBase) !== 0) {
+        throw new RuntimeException('画像保存先が不正です。');
+    }
+
+    $ext = $allowed[$mime];
+    $fileName = 'issue_' . (int)$issue_id . '_toc_' . date('Ymd_His') . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $savePath = $realUploadDir . DIRECTORY_SEPARATOR . $fileName;
+    $dbPath = 'uploads/source_images/' . $fileName;
+
+    if (!move_uploaded_file($file['tmp_name'], $savePath)) {
+        throw new RuntimeException('画像保存に失敗しました。');
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO source_images (
+            issue_id,
+            image_path,
+            note
+        ) VALUES (
+            :issue_id,
+            :image_path,
+            :note
+        )
+    ");
+    $stmt->execute([
+        ':issue_id' => (int)$issue_id,
+        ':image_path' => $dbPath,
+        ':note' => '目次AI抽出用画像',
+    ]);
+
+    return [
+        'source_image_id' => (int)$pdo->lastInsertId(),
+        'db_path' => $dbPath,
+        'file_path' => $savePath,
+        'mime' => $mime,
+        'uploaded_at' => date('Y-m-d H:i:s'),
+    ];
+}
+
+function resolve_toc_extract_image_path($image) {
+    if (!is_array($image) || empty($image['db_path'])) {
+        return '';
+    }
+
+    $path = __DIR__ . '/../' . ltrim((string)$image['db_path'], '/\\');
+    $realBase = realpath(__DIR__ . '/..');
+    $realPath = realpath($path);
+
+    if ($realBase === false || $realPath === false || strpos($realPath, $realBase) !== 0) {
+        return '';
+    }
+
+    return $realPath;
+}
+
+function append_note_parts($note, $parts) {
+    foreach ($parts as $part) {
+        $note = append_note_unique($note, $part);
+    }
+
+    return $note;
+}
+
 function call_ai_toc_extract($raw_text, $work_titles = []) {
     $apiKey = get_openai_api_key();
     if ($apiKey === '') {
@@ -833,6 +1087,283 @@ function call_ai_toc_extract($raw_text, $work_titles = []) {
     return $rows;
 }
 
+function toc_extract_ai_schema() {
+    return [
+        'type' => 'object',
+        'additionalProperties' => false,
+        'required' => ['rows'],
+        'properties' => [
+            'rows' => [
+                'type' => 'array',
+                'items' => [
+                    'type' => 'object',
+                    'additionalProperties' => false,
+                    'required' => [
+                        'display_order',
+                        'start_page',
+                        'work_title',
+                        'creators',
+                        'episode_no',
+                        'episode_title',
+                        'note',
+                        'content_type',
+                        'publication_type',
+                        'is_one_shot',
+                        'is_guest_publication',
+                        'is_new_series',
+                        'is_final_episode',
+                        'color_type',
+                        'page_count',
+                        'confidence',
+                        'raw'
+                    ],
+                    'properties' => [
+                        'display_order' => ['type' => 'integer'],
+                        'start_page' => ['type' => 'string'],
+                        'work_title' => ['type' => 'string'],
+                        'creators' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'object',
+                                'additionalProperties' => false,
+                                'required' => ['name', 'role'],
+                                'properties' => [
+                                    'name' => ['type' => 'string'],
+                                    'role' => ['type' => 'string']
+                                ]
+                            ]
+                        ],
+                        'episode_no' => ['type' => 'string'],
+                        'episode_title' => ['type' => 'string'],
+                        'note' => ['type' => 'string'],
+                        'content_type' => ['type' => 'string'],
+                        'publication_type' => ['type' => 'string'],
+                        'is_one_shot' => ['type' => 'integer'],
+                        'is_guest_publication' => ['type' => 'integer'],
+                        'is_new_series' => ['type' => 'integer'],
+                        'is_final_episode' => ['type' => 'integer'],
+                        'color_type' => ['type' => 'string'],
+                        'page_count' => ['type' => 'string'],
+                        'confidence' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']],
+                        'raw' => ['type' => 'string']
+                    ]
+                ]
+            ]
+        ]
+    ];
+}
+
+function normalize_ai_toc_rows($decodedRows) {
+    $rows = [];
+    $order = 1;
+
+    foreach ($decodedRows as $r) {
+        if (!is_array($r)) {
+            continue;
+        }
+
+        $workTitle = normalize_alnum_space(mb_trim($r['work_title'] ?? ''));
+        $creators = normalize_creators_from_post($r['creators'] ?? []);
+        $creatorText = creators_to_text($creators);
+        $episodeNo = normalize_episode_no($r['episode_no'] ?? '');
+        $episodeTitle = normalize_alnum_space(mb_trim($r['episode_title'] ?? ''));
+        $note = normalize_alnum_space(mb_trim($r['note'] ?? ''));
+        $colorType = normalize_alnum_space(mb_trim($r['color_type'] ?? ''));
+        $pageCount = normalize_alnum_space(mb_trim($r['page_count'] ?? ''));
+        $publicationType = normalize_alnum_space(mb_trim($r['publication_type'] ?? ''));
+        $raw = normalize_alnum_space(mb_trim($r['raw'] ?? ''));
+        $confidence = in_array(($r['confidence'] ?? ''), ['high', 'medium', 'low'], true) ? $r['confidence'] : 'medium';
+
+        if ($workTitle === '' && $creatorText === '' && $episodeNo === '' && $episodeTitle === '') {
+            continue;
+        }
+
+        $noteParts = [];
+        if ($colorType !== '') {
+            $noteParts[] = $colorType;
+        }
+        if (!empty($r['is_one_shot']) && mb_strpos($note, '読切', 0, 'UTF-8') === false) {
+            $noteParts[] = '読切';
+        }
+        if (!empty($r['is_guest_publication']) && mb_strpos($note, '出張掲載', 0, 'UTF-8') === false) {
+            $noteParts[] = '出張掲載';
+        }
+        if (!empty($r['is_new_series']) && mb_strpos($note, '新連載', 0, 'UTF-8') === false) {
+            $noteParts[] = '新連載';
+        }
+        if (!empty($r['is_final_episode']) && mb_strpos($note, '最終回', 0, 'UTF-8') === false) {
+            $noteParts[] = '最終回';
+        }
+        if ($pageCount !== '' && mb_strpos($note, $pageCount, 0, 'UTF-8') === false) {
+            $noteParts[] = preg_match('/P$/iu', $pageCount) ? $pageCount : $pageCount . 'P';
+        }
+        $note = append_note_parts($note, $noteParts);
+
+        $displayOrder = (int)($r['display_order'] ?? 0);
+        if ($displayOrder <= 0) {
+            $displayOrder = $order;
+        }
+
+        $rows[] = [
+            'display_order' => $displayOrder,
+            'page_start' => normalize_episode_no($r['start_page'] ?? ''),
+            'work_id' => 0,
+            'work_title' => $workTitle,
+            'creator_text' => $creatorText,
+            'creators' => $creators,
+            'episode_no' => $episodeNo,
+            'episode_title' => $episodeTitle,
+            'note' => $note,
+            'content_type' => 'manga',
+            'publication_type' => $publicationType,
+            'is_one_shot' => !empty($r['is_one_shot']) ? 1 : 0,
+            'is_guest_publication' => !empty($r['is_guest_publication']) ? 1 : 0,
+            'is_new_series' => !empty($r['is_new_series']) ? 1 : 0,
+            'is_final_episode' => !empty($r['is_final_episode']) ? 1 : 0,
+            'raw' => $raw,
+            'promo' => '',
+            'confidence' => $confidence,
+            'include' => 1,
+        ];
+        $order++;
+    }
+
+    usort($rows, function ($a, $b) {
+        return ((int)$a['display_order']) <=> ((int)$b['display_order']);
+    });
+
+    return array_values($rows);
+}
+
+function call_ai_toc_image_extract($image, $issue, $work_titles = []) {
+    $apiKey = get_openai_api_key();
+    if ($apiKey === '') {
+        throw new RuntimeException('OPENAI_API_KEY が未設定です。サーバー環境変数、または app/config.php の定数で設定してください。');
+    }
+    if (!function_exists('curl_init')) {
+        throw new RuntimeException('PHPのcURL拡張が有効ではありません。');
+    }
+
+    $imagePath = resolve_toc_extract_image_path($image);
+    if ($imagePath === '' || !is_file($imagePath)) {
+        throw new RuntimeException('解析対象の画像が見つかりません。もう一度アップロードしてください。');
+    }
+
+    $mime = $image['mime'] ?? mime_content_type($imagePath);
+    $base64 = base64_encode(file_get_contents($imagePath));
+    if ($base64 === '') {
+        throw new RuntimeException('画像データを読み込めませんでした。');
+    }
+
+    $settings = toc_extract_magazine_settings((int)($issue['magazine_id'] ?? 0));
+    $instruction = implode("\n", [
+        '画像は漫画雑誌の目次です。JSON以外の説明文を返さないでください。',
+        '画像内の文字を推測で補完しすぎず、判読できない項目は空文字にしてください。',
+        '漫画作品と作者を対応付け、複数作者は creators 配列で保持してください。',
+        '原作、作画、漫画、構成、シナリオ、監修、原案などの役割を role に保持し、役割表記がない作者は「作者」にしてください。',
+        '新連載、最終回、読切、出張掲載を識別してください。',
+        '巻頭カラー、巻中カラー、センターカラー、掲載ページ数は note にも分かる形で保持してください。',
+        '作品紹介文やあらすじをタイトルへ混入させないでください。',
+        'プレゼント、広告、投稿募集、お知らせ、インタビュー、次号予告、読者コーナーなどは漫画作品として登録しないでください。',
+        'ページ番号と掲載ページ数を混同しないでください。start_page は開始ページ、page_count は掲載ページ数です。',
+        '縦書き・横書き・複数段組に対応し、目次の自然な読み順を display_order にしてください。',
+        'confidence は high / medium / low のいずれかにしてください。',
+        '共通除外キーワード: ' . implode('、', $settings['exclude_keywords']),
+        '読み取り方向: ' . $settings['reading_direction'],
+        '段組順: ' . $settings['column_order'],
+        '文字方向: ' . $settings['text_direction'],
+        $settings['additional_instruction'],
+    ]);
+
+    $issueText = '';
+    if ($issue) {
+        $issueText = '対象雑誌号: ' . ($issue['magazine_name'] ?? '') . ' ' . ($issue['issue_label'] ?? '') . ' ' . ($issue['issue_no'] ?? '') . ' ' . ($issue['release_date'] ?? '');
+    }
+
+    $payload = [
+        'model' => get_openai_model(),
+        'input' => [
+            [
+                'role' => 'system',
+                'content' => $instruction,
+            ],
+            [
+                'role' => 'user',
+                'content' => [
+                    ['type' => 'input_text', 'text' => $issueText],
+                    ['type' => 'input_image', 'image_url' => 'data:' . $mime . ';base64,' . $base64],
+                ],
+            ],
+        ],
+        'text' => [
+            'format' => [
+                'type' => 'json_schema',
+                'name' => 'toc_extract_rows',
+                'strict' => true,
+                'schema' => toc_extract_ai_schema(),
+            ],
+        ],
+    ];
+
+    $ch = curl_init('https://api.openai.com/v1/responses');
+    $requestId = '';
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HEADERFUNCTION => function ($ch, $header) use (&$requestId) {
+            if (stripos($header, 'x-request-id:') === 0) {
+                $requestId = trim(substr($header, strlen('x-request-id:')));
+            }
+            return strlen($header);
+        },
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $apiKey,
+        ],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        CURLOPT_TIMEOUT => 90,
+    ]);
+
+    $body = curl_exec($ch);
+    $curlError = curl_error($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($body === false) {
+        log_toc_extract_api_error((int)($issue['id'] ?? 0), 'connection_failed', null, $curlError);
+        throw new RuntimeException((stripos($curlError, 'timed out') !== false) ? 'APIタイムアウトが発生しました。時間をおいて再試行してください。' : 'API通信に失敗しました。時間をおいて再試行してください。');
+    }
+
+    $response = json_decode($body, true);
+    if (!is_array($response)) {
+        log_toc_extract_api_error((int)($issue['id'] ?? 0), 'api_response_json_failed', $status, mb_substr($body, 0, 300, 'UTF-8'), $requestId);
+        throw new RuntimeException('AI応答の解析に失敗しました。管理者ログを確認してください。');
+    }
+
+    if ($requestId === '') {
+        $requestId = (string)($response['id'] ?? '');
+    }
+    if ($status < 200 || $status >= 300) {
+        $message = $response['error']['message'] ?? 'OpenAI API error';
+        log_toc_extract_api_error((int)($issue['id'] ?? 0), 'api_error', $status, $message, $requestId);
+        throw new RuntimeException('API通信に失敗しました。HTTPステータス: ' . $status);
+    }
+
+    $text = extract_response_text($response);
+    if ($text === '') {
+        log_toc_extract_api_error((int)($issue['id'] ?? 0), 'empty_response', $status, 'empty output_text', $requestId);
+        throw new RuntimeException('AI応答が空でした。画像を確認して再試行してください。');
+    }
+
+    $decoded = json_decode($text, true);
+    if (!is_array($decoded) || !isset($decoded['rows']) || !is_array($decoded['rows'])) {
+        log_toc_extract_api_error((int)($issue['id'] ?? 0), 'json_parse_failed', $status, json_last_error_msg(), $requestId);
+        throw new RuntimeException('JSON解析に失敗しました。管理者ログを確認してください。');
+    }
+
+    return normalize_ai_toc_rows($decoded['rows']);
+}
+
 function parse_line($line, $work_titles) {
     $original = normalize_alnum_space($line);
     $line = preg_replace('/^\s*・\s*/u', '', $original);
@@ -892,10 +1423,28 @@ try {
     $errors[] = '作品マスタの読み込みに失敗しました: ' . $e->getMessage();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $raw_text = normalize_text($_POST['raw_text'] ?? '');
+$issues = [];
+$selected_issue = null;
+try {
+    $issues = load_issues_for_toc_extract($pdo);
+    $selected_issue = load_issue_for_toc_extract($pdo, $issue_id);
+} catch (Throwable $e) {
+    $errors[] = '雑誌号情報の読み込みに失敗しました。';
+}
 
-    if (isset($_POST['extract'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validate_csrf_toc_extract()) {
+        $errors[] = 'セッション期限切れです。画面を再読み込みしてやり直してください。';
+    }
+
+    $raw_text = normalize_text($_POST['raw_text'] ?? '');
+    $postedIssueId = isset($_POST['issue_id']) ? (int)$_POST['issue_id'] : $issue_id;
+    if ($postedIssueId > 0) {
+        $issue_id = $postedIssueId;
+        $selected_issue = load_issue_for_toc_extract($pdo, $issue_id);
+    }
+
+    if (!$errors && isset($_POST['extract'])) {
         $lines = explode("\n", $raw_text);
         $order = 1;
         foreach ($lines as $line) {
@@ -916,7 +1465,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (isset($_POST['ai_extract'])) {
+    if (!$errors && isset($_POST['ai_extract'])) {
         try {
             $rows = call_ai_toc_extract($raw_text, $work_titles);
             if (!$rows) {
@@ -927,39 +1476,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (isset($_POST['send_to_bulk'])) {
+    if (!$errors && isset($_POST['ai_image_extract'])) {
+        try {
+            if (!$selected_issue) {
+                throw new RuntimeException('雑誌号を選択してください。');
+            }
+
+            if (isset($_FILES['toc_image']) && $_FILES['toc_image']['error'] !== UPLOAD_ERR_NO_FILE) {
+                $uploaded_image = upload_toc_extract_image($pdo, $issue_id);
+                $_SESSION['toc_extract_image'] = $uploaded_image;
+                $messages[] = '目次画像を保存しました。';
+            } elseif (is_array($uploaded_image)) {
+                $imageIssueId = (int)($_SESSION['toc_extract_image_issue_id'] ?? $issue_id);
+                if ($imageIssueId !== $issue_id) {
+                    throw new RuntimeException('保存済み画像の雑誌号が一致しません。もう一度アップロードしてください。');
+                }
+            } else {
+                throw new RuntimeException('画像が選択されていません。');
+            }
+
+            $_SESSION['toc_extract_image_issue_id'] = $issue_id;
+            $rows = call_ai_toc_image_extract($uploaded_image, $selected_issue, $work_titles);
+            if (!$rows) {
+                $errors[] = '抽出結果が0件でした。画像を確認して再試行してください。';
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'AI画像抽出に失敗しました: ' . $e->getMessage();
+            log_toc_extract_api_error($issue_id, 'screen_error', null, $e->getMessage());
+        }
+    }
+
+    if (!$errors && isset($_POST['send_to_bulk'])) {
         $postedRows = $_POST['rows'] ?? [];
         $sessionRows = [];
 
         foreach ($postedRows as $i => $r) {
-            $creators = normalize_creators_json($r['creators_json'] ?? '');
+            if (empty($r['include'])) {
+                continue;
+            }
+
+            $creators = normalize_creators_from_post($r['creators'] ?? []);
+            if (empty($creators)) {
+                $creators = normalize_creators_json($r['creators_json'] ?? '');
+            }
+            $creatorText = normalize_alnum_space(mb_trim($r['creator_text'] ?? ''));
+            if ($creatorText === '' && !empty($creators)) {
+                $creatorText = creators_to_text($creators);
+            }
 
             $sessionRows[] = [
                 'display_order' => (int)($r['display_order'] ?? ($i + 1)),
+                'page_start' => normalize_episode_no($r['page_start'] ?? ''),
                 'work_title' => normalize_alnum_space(mb_trim($r['work_title'] ?? '')),
-                'creator_text' => normalize_alnum_space(mb_trim($r['creator_text'] ?? '')),
+                'creator_text' => $creatorText,
                 'creators' => $creators,
                 'episode_no' => normalize_episode_no($r['episode_no'] ?? ''),
                 'episode_title' => normalize_alnum_space(mb_trim($r['episode_title'] ?? '')),
                 'note' => normalize_alnum_space(mb_trim($r['note'] ?? '')),
-                'is_one_shot' => isset($r['is_one_shot']) ? 1 : 0,
-                'is_guest_publication' => isset($r['is_guest_publication']) ? 1 : 0,
+                'content_type' => normalize_alnum_space(mb_trim($r['content_type'] ?? 'manga')),
+                'publication_type' => normalize_alnum_space(mb_trim($r['publication_type'] ?? '')),
+                'is_one_shot' => (!empty($r['is_one_shot']) || ($r['toc_content_kind'] ?? '') === 'one_shot') ? 1 : 0,
+                'is_guest_publication' => (!empty($r['is_guest_publication']) || ($r['publication_type'] ?? '') === '出張掲載') ? 1 : 0,
                 'is_new_series' => isset($r['is_new_series']) ? 1 : 0,
                 'is_final_episode' => isset($r['is_final_episode']) ? 1 : 0,
                 'raw' => normalize_alnum_space(mb_trim($r['raw'] ?? '')),
             ];
         }
 
-        $_SESSION['toc_extract_rows'] = $sessionRows;
-        $_SESSION['toc_extract_issue_id'] = $issue_id;
-
-        if ($issue_id > 0) {
-            header('Location: content_bulk_add.php?issue_id=' . $issue_id . '&from_toc_extract=1');
-            exit;
+        if (empty($sessionRows)) {
+            $errors[] = '登録対象の行がありません。';
+            $rows = [];
         }
 
-        $errors[] = 'issue_id が未指定のため、目次登録（一括）へ移動できません。URL例: toc_extract_tool_ai.php?issue_id=123';
-        $rows = $sessionRows;
+        if (!$errors) {
+            $_SESSION['toc_extract_rows'] = array_values($sessionRows);
+            $_SESSION['toc_extract_issue_id'] = $issue_id;
+
+            if ($issue_id > 0) {
+                header('Location: content_bulk_add.php?issue_id=' . $issue_id . '&from_toc_extract=1');
+                exit;
+            }
+
+            $errors[] = 'issue_id が未指定のため、目次登録（一括）へ移動できません。URL例: toc_extract_tool_ai.php?issue_id=123';
+        }
+
+        if ($errors) {
+            $rows = $sessionRows;
+        }
     }
 }
 
@@ -1027,11 +1630,13 @@ function bulk_text_from_rows($rows) {
             cursor: pointer;
         }
         button.secondary { background: #2563eb; }
+        button.light { background: #eef2f7; color: #222; border: 1px solid #cbd5e1; }
+        button.danger { background: #b42318; }
         .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 22px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; min-width: 1250px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; min-width: 1480px; }
         th, td { border: 1px solid #d7dde6; padding: 7px; vertical-align: top; }
         th { background: #f0f3f7; white-space: nowrap; }
-        input[type="text"], input[type="number"] {
+        input[type="text"], input[type="number"], select, input[type="file"] {
             width: 100%;
             box-sizing: border-box;
             padding: 7px 8px;
@@ -1041,12 +1646,28 @@ function bulk_text_from_rows($rows) {
         }
         .check { text-align: center; white-space: nowrap; }
         .w-order { width: 58px; }
+        .w-page { width: 82px; }
         .w-episode { width: 72px; }
-        .w-confidence { width: 54px; text-align: center; }
+        .w-confidence { width: 78px; text-align: center; }
         .small { font-size: 12px; color: #667085; line-height: 1.6; }
         .raw { max-width: 240px; color: #667085; font-size: 12px; line-height: 1.5; }
         .copybox { min-height: 140px; }
         .table-wrap { overflow-x: auto; }
+        .form-row { margin-bottom: 14px; }
+        label { display: block; font-weight: 700; margin-bottom: 6px; }
+        .selected-issue { padding: 12px; margin: 12px 0 16px; background: #f7f7f7; border: 1px solid #ddd; border-radius: 6px; line-height: 1.7; }
+        .image-preview { margin: 12px 0 18px; }
+        .image-preview img { max-width: 360px; max-height: 260px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa; }
+        .creator-editor { display: grid; gap: 6px; min-width: 220px; }
+        .creator-row { display: grid; grid-template-columns: 1fr 86px 32px; gap: 5px; align-items: center; }
+        .creator-row button { padding: 6px 8px; }
+        .confidence { display: inline-block; padding: 3px 7px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+        .confidence-high, .confidence-ai, .confidence-高 { background: #ecfdf3; color: #027a48; }
+        .confidence-medium, .confidence-中 { background: #fffaeb; color: #b54708; }
+        .confidence-low, .confidence-低 { background: #fff1f3; color: #c01048; }
+        tr.confidence-medium input, tr.confidence-medium select { border-color: #fdb022; }
+        tr.confidence-low input, tr.confidence-low select { border-color: #f97066; background: #fff8f8; }
+        .row-actions { display: flex; gap: 6px; }
         @media (max-width: 800px) {
             body { padding: 8px; }
             .container { padding: 12px; }
@@ -1066,71 +1687,155 @@ function bulk_text_from_rows($rows) {
     </div>
 
     <div class="message">
-        先頭が「・ 」の行を1件として抽出します。<br>
-        通常抽出は既存のPHPルールで処理します。AI抽出はOpenAI APIを使って作品名・作者・話数・話タイトルをJSON化します。<br>
-        AI抽出を使う場合は、サーバー側で OPENAI_API_KEY を設定してください。
+        雑誌の目次画像をAIで解析し、作品名・作者・開始ページ・備考などを抽出します。抽出結果は必ず確認・修正してから一括登録してください。<br>
+        テキスト貼り付けによる通常抽出とAI抽出も、従来どおり利用できます。
     </div>
+
+    <?php foreach ($messages as $m): ?>
+        <div class="message"><?= h($m) ?></div>
+    <?php endforeach; ?>
 
     <?php foreach ($errors as $e): ?>
         <div class="error"><?= h($e) ?></div>
     <?php endforeach; ?>
 
-    <form method="post">
+    <?php if ($selected_issue): ?>
+        <div class="selected-issue">
+            <strong>選択中：</strong>
+            <?= h($selected_issue['magazine_name']) ?>
+            <?= h($selected_issue['issue_label']) ?>
+            / <?= h($selected_issue['publisher_name']) ?>
+            <?php if (!empty($selected_issue['issue_no'])): ?>/ <?= h($selected_issue['issue_no']) ?>号<?php endif; ?>
+            <?php if (!empty($selected_issue['release_date'])): ?>/ <?= h($selected_issue['release_date']) ?><?php endif; ?>
+        </div>
+    <?php endif; ?>
+
+    <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="<?= h(csrf_token_toc_extract()) ?>">
+
+        <div class="form-row">
+            <label>雑誌号</label>
+            <select name="issue_id">
+                <option value="">選択してください</option>
+                <?php foreach ($issues as $issue): ?>
+                    <option value="<?= h($issue['id']) ?>" <?= ((int)$issue_id === (int)$issue['id']) ? 'selected' : '' ?>>
+                        <?= h($issue['magazine_name']) ?>
+                        <?= h($issue['issue_label']) ?>
+                        / <?= h($issue['publisher_name']) ?>
+                        <?php if (!empty($issue['issue_no'])): ?>/ <?= h($issue['issue_no']) ?>号<?php endif; ?>
+                        <?php if (!empty($issue['release_date'])): ?>/ <?= h($issue['release_date']) ?><?php endif; ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label>目次画像</label>
+            <input type="file" name="toc_image" accept="image/jpeg,image/png,image/webp">
+            <div class="small">JPG / JPEG / PNG / WEBP、1ファイル5MB以下。保存済み画像がある場合は、未選択のままAI再解析できます。</div>
+        </div>
+
+        <?php if (is_array($uploaded_image) && !empty($uploaded_image['db_path'])): ?>
+            <div class="image-preview">
+                <div class="small">解析対象画像</div>
+                <a href="../<?= h($uploaded_image['db_path']) ?>" target="_blank" rel="noopener">
+                    <img src="../<?= h($uploaded_image['db_path']) ?>" alt="解析対象の目次画像">
+                </a>
+            </div>
+        <?php endif; ?>
+
         <textarea name="raw_text" placeholder="ここに目次リストを貼り付けます"><?= h($raw_text) ?></textarea>
         <div class="actions">
             <button type="submit" name="extract" value="1">通常抽出する</button>
             <button type="submit" class="secondary" name="ai_extract" value="1">AI抽出する</button>
+            <button type="submit" class="secondary" name="ai_image_extract" value="1">目次画像からAI抽出</button>
         </div>
     </form>
 
     <?php if ($rows): ?>
-        <form method="post">
+        <form method="post" class="js-toc-result-form">
+            <input type="hidden" name="csrf_token" value="<?= h(csrf_token_toc_extract()) ?>">
+            <input type="hidden" name="issue_id" value="<?= h($issue_id) ?>">
             <input type="hidden" name="raw_text" value="<?= h($raw_text) ?>">
 
             <h2>抽出結果</h2>
             <p class="small">
-                登録前にここで修正してください。精度「低」は作品名がDBから見つからなかった行です。
+                登録前にここで修正してください。信頼度 medium は黄色、low は赤系で表示します。
             </p>
 
             <div class="table-wrap">
                 <table>
                     <thead>
                     <tr>
+                        <th class="check">対象</th>
                         <th class="w-order">順</th>
+                        <th class="w-page">開始P</th>
                         <th>作品名</th>
-                        <th>作者</th>
+                        <th>作者 / 役割</th>
                         <th class="w-episode">話数</th>
                         <th>話タイトル</th>
                         <th>備考</th>
-                        <th class="check">読切</th>
-                        <th class="check">出張</th>
+                        <th>連載・読切</th>
+                        <th>通常・出張</th>
                         <th class="check">新連載</th>
                         <th class="check">最終回</th>
                         <th class="w-confidence">精度</th>
                         <th>元行</th>
+                        <th>操作</th>
                     </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="tocRows">
                     <?php foreach ($rows as $i => $r): ?>
                         <?php $creators_json = json_encode($r['creators'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>
-                        <tr>
+                        <?php $confidence_class = 'confidence-' . h($r['confidence'] ?? 'medium'); ?>
+                        <tr class="<?= h($confidence_class) ?>">
+                            <td class="check"><input type="checkbox" name="rows[<?= $i ?>][include]" value="1" <?= array_key_exists('include', $r) ? (!empty($r['include']) ? 'checked' : '') : 'checked' ?>></td>
                             <td><input type="number" name="rows[<?= $i ?>][display_order]" value="<?= h($r['display_order'] ?? ($i + 1)) ?>"></td>
+                            <td><input type="number" name="rows[<?= $i ?>][page_start]" value="<?= h($r['page_start'] ?? '') ?>"></td>
                             <td><input type="text" name="rows[<?= $i ?>][work_title]" value="<?= h($r['work_title'] ?? '') ?>"></td>
                             <td>
-                                <input type="text" name="rows[<?= $i ?>][creator_text]" value="<?= h($r['creator_text'] ?? '') ?>">
+                                <input type="text" name="rows[<?= $i ?>][creator_text]" value="<?= h($r['creator_text'] ?? '') ?>" placeholder="作者テキスト">
                                 <input type="hidden" name="rows[<?= $i ?>][creators_json]" value="<?= h($creators_json ?: '[]') ?>">
+                                <div class="creator-editor">
+                                    <?php $creatorRows = !empty($r['creators']) ? $r['creators'] : [['name' => '', 'role' => '作者']]; ?>
+                                    <?php foreach ($creatorRows as $ci => $creator): ?>
+                                        <div class="creator-row">
+                                            <input type="text" name="rows[<?= $i ?>][creators][<?= $ci ?>][name]" value="<?= h($creator['name'] ?? '') ?>" placeholder="作者名">
+                                            <input type="text" name="rows[<?= $i ?>][creators][<?= $ci ?>][role]" value="<?= h($creator['role'] ?? '作者') ?>" placeholder="役割">
+                                            <button type="button" class="light js-remove-creator">×</button>
+                                        </div>
+                                    <?php endforeach; ?>
+                                    <button type="button" class="light js-add-creator">作者追加</button>
+                                </div>
                             </td>
                             <td><input type="text" name="rows[<?= $i ?>][episode_no]" value="<?= h($r['episode_no'] ?? '') ?>"></td>
                             <td><input type="text" name="rows[<?= $i ?>][episode_title]" value="<?= h($r['episode_title'] ?? '') ?>"></td>
                             <td><input type="text" name="rows[<?= $i ?>][note]" value="<?= h($r['note'] ?? '') ?>"></td>
-                            <td class="check"><input type="checkbox" name="rows[<?= $i ?>][is_one_shot]" value="1" <?= !empty($r['is_one_shot']) ? 'checked' : '' ?>></td>
-                            <td class="check"><input type="checkbox" name="rows[<?= $i ?>][is_guest_publication]" value="1" <?= !empty($r['is_guest_publication']) ? 'checked' : '' ?>></td>
+                            <td>
+                                <select name="rows[<?= $i ?>][toc_content_kind]">
+                                    <option value="serial" <?= empty($r['is_one_shot']) ? 'selected' : '' ?>>連載</option>
+                                    <option value="one_shot" <?= !empty($r['is_one_shot']) ? 'selected' : '' ?>>読切</option>
+                                </select>
+                                <input type="hidden" name="rows[<?= $i ?>][content_type]" value="<?= h($r['content_type'] ?? 'manga') ?>">
+                                <input type="hidden" name="rows[<?= $i ?>][is_one_shot]" value="<?= !empty($r['is_one_shot']) ? '1' : '' ?>">
+                            </td>
+                            <td>
+                                <select name="rows[<?= $i ?>][publication_type]">
+                                    <option value="通常掲載" <?= (($r['publication_type'] ?? '') === '通常掲載' || empty($r['is_guest_publication'])) ? 'selected' : '' ?>>通常掲載</option>
+                                    <option value="出張掲載" <?= !empty($r['is_guest_publication']) ? 'selected' : '' ?>>出張掲載</option>
+                                </select>
+                                <input type="hidden" name="rows[<?= $i ?>][is_guest_publication]" value="<?= !empty($r['is_guest_publication']) ? '1' : '' ?>">
+                            </td>
                             <td class="check"><input type="checkbox" name="rows[<?= $i ?>][is_new_series]" value="1" <?= !empty($r['is_new_series']) ? 'checked' : '' ?>></td>
                             <td class="check"><input type="checkbox" name="rows[<?= $i ?>][is_final_episode]" value="1" <?= !empty($r['is_final_episode']) ? 'checked' : '' ?>></td>
-                            <td><?= h($r['confidence'] ?? '') ?></td>
+                            <td><span class="confidence <?= h($confidence_class) ?>"><?= h($r['confidence'] ?? '') ?></span></td>
                             <td class="raw">
                                 <?= h($r['raw'] ?? '') ?>
                                 <input type="hidden" name="rows[<?= $i ?>][raw]" value="<?= h($r['raw'] ?? '') ?>">
+                            </td>
+                            <td class="row-actions">
+                                <button type="button" class="light js-sort-row">並替</button>
+                                <button type="button" class="danger js-delete-row">削除</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -1139,6 +1844,7 @@ function bulk_text_from_rows($rows) {
             </div>
 
             <div class="actions">
+                <button type="button" class="light" id="addRowButton">行追加</button>
                 <button type="submit" class="secondary" name="send_to_bulk" value="1">目次登録（一括）に渡す</button>
             </div>
 
@@ -1148,5 +1854,122 @@ function bulk_text_from_rows($rows) {
         </form>
     <?php endif; ?>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const tbody = document.getElementById('tocRows');
+    const addRowButton = document.getElementById('addRowButton');
+
+    function renumberNames() {
+        if (!tbody) return;
+        tbody.querySelectorAll('tr').forEach(function (tr, rowIndex) {
+            tr.querySelectorAll('input, select').forEach(function (field) {
+                if (!field.name) return;
+                field.name = field.name.replace(/rows\[[0-9]+\]/, 'rows[' + rowIndex + ']');
+            });
+        });
+    }
+
+    function nextCreatorIndex(editor) {
+        let max = -1;
+        editor.querySelectorAll('input[name*="[creators]"]').forEach(function (field) {
+            const match = field.name.match(/\[creators\]\[([0-9]+)\]/);
+            if (match) max = Math.max(max, parseInt(match[1], 10));
+        });
+        return max + 1;
+    }
+
+    function addCreator(editor, rowIndex, name, role) {
+        const idx = nextCreatorIndex(editor);
+        const row = document.createElement('div');
+        row.className = 'creator-row';
+        row.innerHTML =
+            '<input type="text" name="rows[' + rowIndex + '][creators][' + idx + '][name]" placeholder="作者名">' +
+            '<input type="text" name="rows[' + rowIndex + '][creators][' + idx + '][role]" placeholder="役割">' +
+            '<button type="button" class="light js-remove-creator">×</button>';
+        row.querySelector('input[name$="[name]"]').value = name || '';
+        row.querySelector('input[name$="[role]"]').value = role || '作者';
+        editor.insertBefore(row, editor.querySelector('.js-add-creator'));
+    }
+
+    if (tbody) {
+        tbody.addEventListener('click', function (event) {
+            const target = event.target;
+            const tr = target.closest('tr');
+            if (!tr) return;
+
+            if (target.classList.contains('js-delete-row')) {
+                tr.remove();
+                renumberNames();
+                return;
+            }
+
+            if (target.classList.contains('js-sort-row')) {
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                rows.sort(function (a, b) {
+                    const av = parseInt((a.querySelector('input[name$="[display_order]"]') || {}).value || '0', 10);
+                    const bv = parseInt((b.querySelector('input[name$="[display_order]"]') || {}).value || '0', 10);
+                    return av - bv;
+                });
+                rows.forEach(function (row) { tbody.appendChild(row); });
+                renumberNames();
+                return;
+            }
+
+            if (target.classList.contains('js-add-creator')) {
+                const rowIndex = Array.from(tbody.querySelectorAll('tr')).indexOf(tr);
+                addCreator(target.closest('.creator-editor'), rowIndex, '', '作者');
+                return;
+            }
+
+            if (target.classList.contains('js-remove-creator')) {
+                const editor = target.closest('.creator-editor');
+                if (editor && editor.querySelectorAll('.creator-row').length > 1) {
+                    target.closest('.creator-row').remove();
+                }
+            }
+        });
+
+        tbody.addEventListener('change', function (event) {
+            const field = event.target;
+            const tr = field.closest('tr');
+            if (!tr) return;
+            if (field.name && field.name.endsWith('[toc_content_kind]')) {
+                const hidden = tr.querySelector('input[name$="[is_one_shot]"]');
+                if (hidden) hidden.value = field.value === 'one_shot' ? '1' : '';
+            }
+            if (field.name && field.name.endsWith('[publication_type]')) {
+                const hidden = tr.querySelector('input[name$="[is_guest_publication]"]');
+                if (hidden) hidden.value = field.value === '出張掲載' ? '1' : '';
+            }
+        });
+    }
+
+    if (addRowButton && tbody) {
+        addRowButton.addEventListener('click', function () {
+            const rowIndex = tbody.querySelectorAll('tr').length;
+            const tr = document.createElement('tr');
+            tr.className = 'confidence-medium';
+            tr.innerHTML =
+                '<td class="check"><input type="checkbox" name="rows[' + rowIndex + '][include]" value="1" checked></td>' +
+                '<td><input type="number" name="rows[' + rowIndex + '][display_order]" value="' + (rowIndex + 1) + '"></td>' +
+                '<td><input type="number" name="rows[' + rowIndex + '][page_start]" value=""></td>' +
+                '<td><input type="text" name="rows[' + rowIndex + '][work_title]" value=""></td>' +
+                '<td><input type="text" name="rows[' + rowIndex + '][creator_text]" value="" placeholder="作者テキスト"><input type="hidden" name="rows[' + rowIndex + '][creators_json]" value="[]"><div class="creator-editor"><button type="button" class="light js-add-creator">作者追加</button></div></td>' +
+                '<td><input type="text" name="rows[' + rowIndex + '][episode_no]" value=""></td>' +
+                '<td><input type="text" name="rows[' + rowIndex + '][episode_title]" value=""></td>' +
+                '<td><input type="text" name="rows[' + rowIndex + '][note]" value=""></td>' +
+                '<td><select name="rows[' + rowIndex + '][toc_content_kind]"><option value="serial">連載</option><option value="one_shot">読切</option></select><input type="hidden" name="rows[' + rowIndex + '][content_type]" value="manga"><input type="hidden" name="rows[' + rowIndex + '][is_one_shot]" value=""></td>' +
+                '<td><select name="rows[' + rowIndex + '][publication_type]"><option value="通常掲載">通常掲載</option><option value="出張掲載">出張掲載</option></select><input type="hidden" name="rows[' + rowIndex + '][is_guest_publication]" value=""></td>' +
+                '<td class="check"><input type="checkbox" name="rows[' + rowIndex + '][is_new_series]" value="1"></td>' +
+                '<td class="check"><input type="checkbox" name="rows[' + rowIndex + '][is_final_episode]" value="1"></td>' +
+                '<td><span class="confidence confidence-medium">medium</span></td>' +
+                '<td class="raw"><input type="hidden" name="rows[' + rowIndex + '][raw]" value=""></td>' +
+                '<td class="row-actions"><button type="button" class="light js-sort-row">並替</button><button type="button" class="danger js-delete-row">削除</button></td>';
+            tbody.appendChild(tr);
+            addCreator(tr.querySelector('.creator-editor'), rowIndex, '', '作者');
+        });
+    }
+});
+</script>
 </body>
 </html>

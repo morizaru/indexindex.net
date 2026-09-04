@@ -7,8 +7,23 @@ header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/../app/config.php';
 
+if (empty($_SESSION['content_bulk_csrf_token'])) {
+    $_SESSION['content_bulk_csrf_token'] = bin2hex(random_bytes(32));
+}
+if (empty($_SESSION['content_bulk_submit_token'])) {
+    $_SESSION['content_bulk_submit_token'] = bin2hex(random_bytes(32));
+}
+
 function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+function content_bulk_csrf_token() {
+    return $_SESSION['content_bulk_csrf_token'] ?? '';
+}
+
+function content_bulk_submit_token() {
+    return $_SESSION['content_bulk_submit_token'] ?? '';
 }
 
 function editable_issue_status_sql(): string {
@@ -519,9 +534,6 @@ function normalize_structured_creators($creators) {
 
         $name = mb_convert_kana(trim((string)($creator['name'] ?? '')), 'as', 'UTF-8');
         $role = mb_convert_kana(trim((string)($creator['role'] ?? '')), 'as', 'UTF-8');
-        if ($role === '作者') {
-            $role = '';
-        }
 
         if ($name !== '') {
             $items[] = [
@@ -648,6 +660,8 @@ function make_empty_rows() {
             'creators' => [],
             'episode_no' => '',
             'episode_title' => '',
+            'content_type' => 'manga',
+            'publication_type' => '',
             'is_one_shot' => 0,
             'is_guest_publication' => 0,
             'is_new_series' => 0,
@@ -695,13 +709,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['from_toc_extract'])) {
             $r = $session_rows[$i];
 
             $rows_input[$i] = [
-                'page_start' => '',
+                'page_start' => trim((string)($r['page_start'] ?? $r['start_page'] ?? '')),
                 'work_id' => isset($r['work_id']) ? (int)$r['work_id'] : 0,
                 'title_main' => mb_convert_kana(trim($r['work_title'] ?? ''), 'as', 'UTF-8'),
                 'creator_name' => mb_convert_kana(trim($r['creator_text'] ?? ''), 'as', 'UTF-8'),
                 'creators' => normalize_structured_creators($r['creators'] ?? []),
                 'episode_no' => normalize_episode_no_bulk($r['episode_no'] ?? ''),
                 'episode_title' => mb_convert_kana(trim($r['episode_title'] ?? ''), 'as', 'UTF-8'),
+                'content_type' => mb_convert_kana(trim($r['content_type'] ?? 'manga'), 'as', 'UTF-8'),
+                'publication_type' => mb_convert_kana(trim($r['publication_type'] ?? ''), 'as', 'UTF-8'),
                 'is_one_shot' => !empty($r['is_one_shot']) ? 1 : 0,
                 'is_guest_publication' => !empty($r['is_guest_publication']) ? 1 : 0,
                 'is_new_series' => !empty($r['is_new_series']) ? 1 : 0,
@@ -753,6 +769,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($posted_rows)) {
         $posted_rows = [];
     }
+    $csrf_valid = isset($_POST['csrf_token'])
+        && is_string($_POST['csrf_token'])
+        && hash_equals($_SESSION['content_bulk_csrf_token'] ?? '', $_POST['csrf_token']);
+    $submit_token_valid = isset($_POST['submit_token'])
+        && is_string($_POST['submit_token'])
+        && hash_equals($_SESSION['content_bulk_submit_token'] ?? '', $_POST['submit_token']);
 
     // POST時のデバッグログ表示状態を確認（チェックボックス状態）
     $debug_logs_enabled = isset($_POST['debug_logs_enabled']) && $_POST['debug_logs_enabled'] === '1';
@@ -773,6 +795,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $episode_title = mb_convert_kana(trim($posted_row['episode_title'] ?? ''), 'as', 'UTF-8');
         $note = mb_convert_kana(trim($posted_row['note'] ?? ''), 'as', 'UTF-8');
         $creators = normalize_structured_creators_json($posted_row['creators_json'] ?? '');
+        $content_type = mb_convert_kana(trim($posted_row['content_type'] ?? 'manga'), 'as', 'UTF-8');
+        $publication_type_input = mb_convert_kana(trim($posted_row['publication_type'] ?? ''), 'as', 'UTF-8');
 
         $rows_input[$i] = [
             'page_start' => $page_start,
@@ -782,6 +806,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'creators' => $creators,
             'episode_no' => $episode_no,
             'episode_title' => $episode_title,
+            'content_type' => ($content_type !== '') ? $content_type : 'manga',
+            'publication_type' => $publication_type_input,
             'is_one_shot' => isset($posted_row['is_one_shot']) ? 1 : 0,
             'is_guest_publication' => isset($posted_row['is_guest_publication']) ? 1 : 0,
             'is_new_series' => isset($posted_row['is_new_series']) ? 1 : 0,
@@ -791,6 +817,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     try {
+        if (!$csrf_valid) {
+            throw new Exception('セッション期限切れです。画面を再読み込みしてやり直してください。');
+        }
+
+        if (!$submit_token_valid) {
+            throw new Exception('すでに送信済み、または古いフォームです。画面を再読み込みして確認してください。');
+        }
+
         if ($issue_id <= 0) {
             throw new Exception('雑誌号を選択してください。');
         }
@@ -806,6 +840,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $episode_no = $rows_input[$i]['episode_no'];
             $episode_title = $rows_input[$i]['episode_title'];
             $note = $rows_input[$i]['note'];
+            $content_type = $rows_input[$i]['content_type'] ?: 'manga';
+            $publication_type_input = $rows_input[$i]['publication_type'] ?? '';
 
             $is_one_shot = (int)$rows_input[$i]['is_one_shot'];
             $is_guest_publication = (int)$rows_input[$i]['is_guest_publication'];
@@ -836,6 +872,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($creator_name === '' && empty($creators)) {
                 throw new Exception(($i + 1) . '行目：作者名を入力してください。');
+            }
+
+            if ($page_start === '') {
+                throw new Exception(($i + 1) . '行目：開始ページを入力してください。');
             }
 
             if (!empty($creators)) {
@@ -876,6 +916,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $publication_type = '読切';
             } elseif ($is_guest_publication) {
                 $publication_type = '出張掲載';
+            } elseif ($publication_type_input !== '' && $publication_type_input !== '通常掲載') {
+                $publication_type = $publication_type_input;
             } else {
                 $publication_type = '連載';
             }
@@ -889,6 +931,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'creator_rows' => $creator_rows,
                 'episode_no' => $episode_no,
                 'episode_title' => $episode_title,
+                'content_type' => $content_type,
                 'publication_type' => $publication_type,
                 'is_new_series' => $is_new_series,
                 'is_final_episode' => $is_final_episode,
@@ -946,7 +989,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     :episode_no,
                     :episode_title,
                     :note,
-                    'manga',
+                    :content_type,
                     :publication_type,
                     :is_new_series,
                     :is_final_episode
@@ -962,6 +1005,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':episode_no' => ($row['episode_no'] !== '') ? $row['episode_no'] : null,
                 ':episode_title' => ($row['episode_title'] !== '') ? $row['episode_title'] : null,
                 ':note' => ($row['note'] !== '') ? $row['note'] : null,
+                ':content_type' => ($row['content_type'] !== '') ? $row['content_type'] : 'manga',
                 ':publication_type' => $row['publication_type'],
                 ':is_new_series' => $row['is_new_series'],
                 ':is_final_episode' => $row['is_final_episode'],
@@ -1032,6 +1076,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->commit();
 
+        $_SESSION['content_bulk_submit_token'] = bin2hex(random_bytes(32));
         unset($_SESSION['toc_extract_rows'], $_SESSION['toc_extract_issue_id']);
 
         // リダイレクト先URL を作成（デバッグログは常時出力、表示制御はセッションで管理）
@@ -1211,6 +1256,18 @@ if ($issue_id > 0) {
         }
 
         button:hover { background: #111; }
+
+        .ai-extract-link {
+            display: inline-block;
+            padding: 9px 14px;
+            border: 1px solid #2563eb;
+            border-radius: 4px;
+            background: #2563eb;
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 14px;
+        }
 
         .required {
             color: #b00020;
@@ -1413,6 +1470,9 @@ if ($issue_id > 0) {
                     if (!field.name) {
                         return;
                     }
+                    if (field.name === 'csrf_token' || field.name === 'submit_token') {
+                        return;
+                    }
 
                     if (field.type === 'checkbox') {
                         values[field.name] = field.checked ? '1' : '';
@@ -1445,6 +1505,9 @@ if ($issue_id > 0) {
 
                 bulkForm.querySelectorAll('input, select, textarea').forEach(function (field) {
                     if (!field.name || !Object.prototype.hasOwnProperty.call(values, field.name)) {
+                        return;
+                    }
+                    if (field.name === 'csrf_token' || field.name === 'submit_token') {
                         return;
                     }
 
@@ -1887,9 +1950,16 @@ if ($issue_id > 0) {
                 <?= h($selected_issue['release_date']) ?>
             <?php endif; ?>
         </div>
+        <div class="form-row">
+            <a class="ai-extract-link" href="toc_extract_tool_ai.php?issue_id=<?= h($issue_id) ?>">目次画像からAI抽出</a>
+        </div>
+    <?php else: ?>
+        <div class="help">目次画像からAI抽出する場合は、先に雑誌号を選択してください。</div>
     <?php endif; ?>
 
     <form method="post" action="content_bulk_add.php<?= ($issue_id > 0) ? '?issue_id=' . h($issue_id) : '' ?>" class="js-content-bulk-form">
+        <input type="hidden" name="csrf_token" value="<?= h(content_bulk_csrf_token()) ?>">
+        <input type="hidden" name="submit_token" value="<?= h(content_bulk_submit_token()) ?>">
         <!-- デバッグログ表示状態をPOSTで送信（チェックボックスの状態を保持） -->
         <input type="hidden" id="debugLogsEnabledField" name="debug_logs_enabled" value="0">
 
@@ -1966,6 +2036,16 @@ if ($issue_id > 0) {
                                     type="hidden"
                                     name="rows[<?= h($i) ?>][work_id]"
                                     value="<?= h($rows_input[$i]['work_id'] ?? 0) ?>"
+                                >
+                                <input
+                                    type="hidden"
+                                    name="rows[<?= h($i) ?>][content_type]"
+                                    value="<?= h($rows_input[$i]['content_type'] ?? 'manga') ?>"
+                                >
+                                <input
+                                    type="hidden"
+                                    name="rows[<?= h($i) ?>][publication_type]"
+                                    value="<?= h($rows_input[$i]['publication_type'] ?? '') ?>"
                                 >
                                 <div class="suggest-list"></div>
                                 <div class="creator-autofill-note"></div>
