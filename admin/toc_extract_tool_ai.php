@@ -635,7 +635,7 @@ function creators_to_text($creators) {
             continue;
         }
 
-        if ($role === '' || $role === '作者') {
+        if ($role === '' || $role === '作者' || $role === 'author') {
             $parts[] = $name;
         } else {
             $parts[] = $role . '：' . $name;
@@ -659,6 +659,10 @@ function normalize_creators_json($json) {
 
         $name = normalize_alnum_space(mb_trim($creator['name'] ?? ''));
         $role = normalize_alnum_space(mb_trim($creator['role'] ?? ''));
+
+        if ($role === '作者') {
+            $role = 'author';
+        }
 
         if ($name !== '') {
             $items[] = ['name' => $name, 'role' => $role];
@@ -684,8 +688,8 @@ function normalize_creators_from_post($value) {
         if ($name === '') {
             continue;
         }
-        if ($role === '') {
-            $role = '作者';
+        if ($role === '' || $role === '作者') {
+            $role = 'author';
         }
 
         $items[] = ['name' => $name, 'role' => $role];
@@ -751,7 +755,9 @@ function load_issues_for_toc_extract($pdo) {
     return $stmt->fetchAll();
 }
 
-function toc_extract_magazine_settings($magazine_id) {
+function toc_extract_magazine_settings($issue_or_magazine_id) {
+    $magazine_id = is_array($issue_or_magazine_id) ? (int)($issue_or_magazine_id['magazine_id'] ?? 0) : (int)$issue_or_magazine_id;
+    $magazine_name = is_array($issue_or_magazine_id) ? (string)($issue_or_magazine_id['magazine_name'] ?? '') : '';
     $common = [
         'reading_direction' => 'natural',
         'column_order' => 'auto',
@@ -765,18 +771,32 @@ function toc_extract_magazine_settings($magazine_id) {
         'additional_instruction' => '',
     ];
 
+    $margaretFormat = [
+        'column_order' => 'right_to_left',
+        'text_direction' => 'vertical',
+        'additional_instruction' => implode("\n", [
+            'マーガレット[月2回刊]の目次では、画像が見開きになっていることがあります。右ページの大きな目次だけで止めず、左ページ上部の「Contents」パネルも漫画作品の目次として必ず確認してください。',
+            '左ページ上部の「Contents」パネルでは、各行の右端に黒い吹き出し状・ギザギザ状の開始ページ番号があり、作品名と作者名が横並びで載ることがあります。この形式も通常の作品行として抽出してください。',
+            '左ページ側には300番台以降の後半ページ作品がまとまることがあります。ページ番号が大きい、右ページとデザインが違う、文字が小さい、という理由だけで除外しないでください。',
+            '左ページ下部にはカラーグラビア、まんがセミナー、お知らせ、コーナー、アンケートなども混在します。これらは漫画作品ではないため登録対象にしないでください。',
+            '例: 「ふたりで恋をする理由」や「矢神くんは、今日もイジワル。」に巻頭カラー以外のカラー表記がある場合、note/color_type は「センターカラー」にしてください。',
+            '左側抽出の参考例: 309「春は短し恋せよ男子。」椎葉ナナ、334「円谷さん家」あだち、337「僕だって、キスしたい。」細堀ゆかり、363「この男、不可視議につき。」須賀千夏、389「つまさきだちのアリス」吉田夢美、418「うしろにS子さん」森ゆきえ、427「乙女の放課後」安理由香。',
+            '参考例と完全一致する必要はありません。実際の画像で読める左上Contentsパネルの作品を優先してください。',
+        ]),
+    ];
+
     $byMagazine = [
         // magazine_id が確認できたら、ここにマーガレット形式の実IDを追加する。
         // 例: 123 => ['column_order' => 'right_to_left', 'text_direction' => 'vertical']
-        'margaret_format' => [
-            'column_order' => 'right_to_left',
-            'text_direction' => 'vertical',
-            'additional_instruction' => 'マーガレット系の目次では縦書き・複数段組の可能性を優先し、右列から左列の自然な掲載順を慎重に判断してください。',
-        ],
+        'margaret_format' => $margaretFormat,
     ];
 
     if (isset($byMagazine[(int)$magazine_id])) {
         return array_merge($common, $byMagazine[(int)$magazine_id]);
+    }
+
+    if ($magazine_name !== '' && mb_strpos($magazine_name, 'マーガレット', 0, 'UTF-8') !== false) {
+        return array_merge($common, $margaretFormat);
     }
 
     return $common;
@@ -906,6 +926,52 @@ function append_note_parts($note, $parts) {
     return $note;
 }
 
+function remove_unneeded_note_tokens($note) {
+    $note = normalize_alnum_space(mb_trim($note));
+    if ($note === '') {
+        return '';
+    }
+
+    $parts = preg_split('/\s*(?:\/|／|、|,|・)\s*/u', $note);
+    $kept = [];
+    foreach ($parts as $part) {
+        $part = mb_trim($part);
+        if ($part === '' || preg_match('/^(モノクロ|白黒|通常カラーなし|color|カラー)$/iu', $part)) {
+            continue;
+        }
+        if (preg_match('/^(読切|読み切り|読切り)$/u', $part)) {
+            continue;
+        }
+        if (preg_match('/カラー|color/iu', $part) && !preg_match('/^(巻頭カラー|センターカラー)$/u', $part)) {
+            continue;
+        }
+        $kept[] = $part;
+    }
+
+    return implode(' / ', $kept);
+}
+
+function text_has_one_shot_marker($text) {
+    return preg_match('/読切|読み切り|読切り/u', (string)$text) ? true : false;
+}
+
+function normalize_color_note($texts) {
+    $joined = normalize_alnum_space(implode(' ', array_map('strval', $texts)));
+    if ($joined === '' || preg_match('/モノクロ|白黒|通常カラーなし/iu', $joined)) {
+        return '';
+    }
+
+    if (preg_match('/巻頭\s*カラー|巻頭C|表紙\s*&?\s*巻頭カラー/iu', $joined)) {
+        return '巻頭カラー';
+    }
+
+    if (preg_match('/センター\s*カラー|巻中\s*カラー|カラー扉|カラー[0-9０-９]*P|[Cc]olor|カラー/u', $joined)) {
+        return 'センターカラー';
+    }
+
+    return '';
+}
+
 function call_ai_toc_extract($raw_text, $work_titles = []) {
     $apiKey = get_openai_api_key();
     if ($apiKey === '') {
@@ -971,7 +1037,7 @@ function call_ai_toc_extract($raw_text, $work_titles = []) {
         'input' => [
             [
                 'role' => 'system',
-                'content' => 'あなたは漫画雑誌の目次データをINDEXINDEX登録用に構造化する抽出エンジンです。説明文は不要です。入力行のうち先頭が「・」の行だけを対象にしてください。作品名、作者、役割、話数、話タイトル、備考、読切/出張掲載/新連載/最終回フラグを抽出してください。話数は数字だけに正規化してください。判断できない値は空文字にしてください。通常の作者 role は「作者」にしてください。原作、作画、脚本、監修、原案、story director などは role にそのまま入れてください。'
+                'content' => 'あなたは漫画雑誌の目次データをINDEXINDEX登録用に構造化する抽出エンジンです。説明文は不要です。入力行のうち先頭が「・」の行だけを対象にしてください。作品名、作者、役割、話数、話タイトル、備考、読切/出張掲載/新連載/最終回フラグを抽出してください。話数は数字だけに正規化してください。判断できない値は空文字にしてください。通常の作者 role は「author」にしてください。原作、作画、脚本、監修、原案、story director などは role にそのまま入れてください。備考に「モノクロ」「白黒」「color」「カラー」のような曖昧またはカラーでないことだけを示す表記は入れないでください。読切/読み切りは備考ではなく is_one_shot に入れてください。'
             ],
             [
                 'role' => 'user',
@@ -1043,8 +1109,11 @@ function call_ai_toc_extract($raw_text, $work_titles = []) {
 
         $episodeNo = normalize_episode_no($r['episode_no'] ?? '');
         $episodeTitle = normalize_alnum_space(mb_trim($r['episode_title'] ?? ''));
-        $note = normalize_alnum_space(mb_trim($r['note'] ?? ''));
         $raw = normalize_alnum_space(mb_trim($r['raw'] ?? ''));
+        $note = remove_unneeded_note_tokens($r['note'] ?? '');
+        $isOneShot = !empty($r['is_one_shot'])
+            || text_has_one_shot_marker($note)
+            || text_has_one_shot_marker($raw);
         [$detectedEpisodeNo, $detectedEpisodeText] = detect_ai_episode_marker([
             $r['episode_no'] ?? '',
             $r['episode_title'] ?? '',
@@ -1074,7 +1143,7 @@ function call_ai_toc_extract($raw_text, $work_titles = []) {
             'episode_no' => $episodeNo,
             'episode_title' => $episodeTitle,
             'note' => $note,
-            'is_one_shot' => !empty($r['is_one_shot']) ? 1 : 0,
+            'is_one_shot' => $isOneShot ? 1 : 0,
             'is_guest_publication' => !empty($r['is_guest_publication']) ? 1 : 0,
             'is_new_series' => !empty($r['is_new_series']) ? 1 : 0,
             'is_final_episode' => !empty($r['is_final_episode']) ? 1 : 0,
@@ -1167,23 +1236,25 @@ function normalize_ai_toc_rows($decodedRows) {
         $creatorText = creators_to_text($creators);
         $episodeNo = normalize_episode_no($r['episode_no'] ?? '');
         $episodeTitle = normalize_alnum_space(mb_trim($r['episode_title'] ?? ''));
-        $note = normalize_alnum_space(mb_trim($r['note'] ?? ''));
+        $note = remove_unneeded_note_tokens($r['note'] ?? '');
         $colorType = normalize_alnum_space(mb_trim($r['color_type'] ?? ''));
         $pageCount = normalize_alnum_space(mb_trim($r['page_count'] ?? ''));
         $publicationType = normalize_alnum_space(mb_trim($r['publication_type'] ?? ''));
         $raw = normalize_alnum_space(mb_trim($r['raw'] ?? ''));
         $confidence = in_array(($r['confidence'] ?? ''), ['high', 'medium', 'low'], true) ? $r['confidence'] : 'medium';
+        $isOneShot = !empty($r['is_one_shot'])
+            || text_has_one_shot_marker($note)
+            || text_has_one_shot_marker($publicationType)
+            || text_has_one_shot_marker($raw);
 
         if ($workTitle === '' && $creatorText === '' && $episodeNo === '' && $episodeTitle === '') {
             continue;
         }
 
         $noteParts = [];
-        if ($colorType !== '') {
-            $noteParts[] = $colorType;
-        }
-        if (!empty($r['is_one_shot']) && mb_strpos($note, '読切', 0, 'UTF-8') === false) {
-            $noteParts[] = '読切';
+        $colorNote = normalize_color_note([$colorType, $note, $raw]);
+        if ($colorNote !== '') {
+            $noteParts[] = $colorNote;
         }
         if (!empty($r['is_guest_publication']) && mb_strpos($note, '出張掲載', 0, 'UTF-8') === false) {
             $noteParts[] = '出張掲載';
@@ -1197,7 +1268,7 @@ function normalize_ai_toc_rows($decodedRows) {
         if ($pageCount !== '' && mb_strpos($note, $pageCount, 0, 'UTF-8') === false) {
             $noteParts[] = preg_match('/P$/iu', $pageCount) ? $pageCount : $pageCount . 'P';
         }
-        $note = append_note_parts($note, $noteParts);
+        $note = remove_unneeded_note_tokens(append_note_parts($note, $noteParts));
 
         $displayOrder = (int)($r['display_order'] ?? 0);
         if ($displayOrder <= 0) {
@@ -1216,7 +1287,7 @@ function normalize_ai_toc_rows($decodedRows) {
             'note' => $note,
             'content_type' => 'manga',
             'publication_type' => $publicationType,
-            'is_one_shot' => !empty($r['is_one_shot']) ? 1 : 0,
+            'is_one_shot' => $isOneShot ? 1 : 0,
             'is_guest_publication' => !empty($r['is_guest_publication']) ? 1 : 0,
             'is_new_series' => !empty($r['is_new_series']) ? 1 : 0,
             'is_final_episode' => !empty($r['is_final_episode']) ? 1 : 0,
@@ -1255,14 +1326,20 @@ function call_ai_toc_image_extract($image, $issue, $work_titles = []) {
         throw new RuntimeException('画像データを読み込めませんでした。');
     }
 
-    $settings = toc_extract_magazine_settings((int)($issue['magazine_id'] ?? 0));
+    $settings = toc_extract_magazine_settings($issue);
     $instruction = implode("\n", [
         '画像は漫画雑誌の目次です。JSON以外の説明文を返さないでください。',
+        '画像全体を確認し、右側だけ・上部だけなど一部で止めず、左右両側、全列、全段にある漫画作品を漏れなく抽出してください。',
+        '見開き画像では、左右のページを別々に確認してから統合してください。片側の大きなタイトルやロゴがあるページだけを目次全体と判断しないでください。',
+        '「Contents」「もくじ」「目次」と書かれた小さなパネル内の作品行も登録対象です。ページ番号、作品名、作者名が並ぶ行を優先して抽出してください。',
         '画像内の文字を推測で補完しすぎず、判読できない項目は空文字にしてください。',
         '漫画作品と作者を対応付け、複数作者は creators 配列で保持してください。',
-        '原作、作画、漫画、構成、シナリオ、監修、原案などの役割を role に保持し、役割表記がない作者は「作者」にしてください。',
+        '原作、作画、漫画、構成、シナリオ、監修、原案などの役割を role に保持し、役割表記がない作者は「author」にしてください。',
         '新連載、最終回、読切、出張掲載を識別してください。',
-        '巻頭カラー、巻中カラー、センターカラー、掲載ページ数は note にも分かる形で保持してください。',
+        '読切/読み切りの表記がある作品は is_one_shot=1 にし、note には読切/読み切りを入れないでください。',
+        '巻頭カラーの文字がある場合だけ note/color_type は「巻頭カラー」にしてください。巻頭カラー以外のカラー表記、カラー扉、カラー付き表記、巻中カラー、センターカラーは「センターカラー」に正規化してください。',
+        '備考に「モノクロ」「白黒」「color」「カラー」のような曖昧またはカラーでないことだけを示す表記は入れないでください。',
+        '掲載ページ数は note にも分かる形で保持してください。',
         '作品紹介文やあらすじをタイトルへ混入させないでください。',
         'プレゼント、広告、投稿募集、お知らせ、インタビュー、次号予告、読者コーナーなどは漫画作品として登録しないでください。',
         'ページ番号と掲載ページ数を混同しないでください。start_page は開始ページ、page_count は掲載ページ数です。',
@@ -1523,6 +1600,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($creatorText === '' && !empty($creators)) {
                 $creatorText = creators_to_text($creators);
             }
+            $noteInput = $r['note'] ?? '';
+            $rawInput = $r['raw'] ?? '';
+            $publicationTypeInput = normalize_alnum_space(mb_trim($r['publication_type'] ?? ''));
+            $isOneShot = !empty($r['is_one_shot'])
+                || ($r['toc_content_kind'] ?? '') === 'one_shot'
+                || text_has_one_shot_marker($noteInput)
+                || text_has_one_shot_marker($rawInput)
+                || text_has_one_shot_marker($publicationTypeInput);
 
             $sessionRows[] = [
                 'display_order' => (int)($r['display_order'] ?? ($i + 1)),
@@ -1532,14 +1617,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'creators' => $creators,
                 'episode_no' => normalize_episode_no($r['episode_no'] ?? ''),
                 'episode_title' => normalize_alnum_space(mb_trim($r['episode_title'] ?? '')),
-                'note' => normalize_alnum_space(mb_trim($r['note'] ?? '')),
+                'note' => remove_unneeded_note_tokens($noteInput),
                 'content_type' => normalize_alnum_space(mb_trim($r['content_type'] ?? 'manga')),
-                'publication_type' => normalize_alnum_space(mb_trim($r['publication_type'] ?? '')),
-                'is_one_shot' => (!empty($r['is_one_shot']) || ($r['toc_content_kind'] ?? '') === 'one_shot') ? 1 : 0,
+                'publication_type' => $isOneShot ? '読切' : $publicationTypeInput,
+                'is_one_shot' => $isOneShot ? 1 : 0,
                 'is_guest_publication' => (!empty($r['is_guest_publication']) || ($r['publication_type'] ?? '') === '出張掲載') ? 1 : 0,
                 'is_new_series' => isset($r['is_new_series']) ? 1 : 0,
                 'is_final_episode' => isset($r['is_final_episode']) ? 1 : 0,
-                'raw' => normalize_alnum_space(mb_trim($r['raw'] ?? '')),
+                'raw' => normalize_alnum_space(mb_trim($rawInput)),
             ];
         }
 
@@ -1797,11 +1882,11 @@ function bulk_text_from_rows($rows) {
                                 <input type="text" name="rows[<?= $i ?>][creator_text]" value="<?= h($r['creator_text'] ?? '') ?>" placeholder="作者テキスト">
                                 <input type="hidden" name="rows[<?= $i ?>][creators_json]" value="<?= h($creators_json ?: '[]') ?>">
                                 <div class="creator-editor">
-                                    <?php $creatorRows = !empty($r['creators']) ? $r['creators'] : [['name' => '', 'role' => '作者']]; ?>
+                                    <?php $creatorRows = !empty($r['creators']) ? $r['creators'] : [['name' => '', 'role' => 'author']]; ?>
                                     <?php foreach ($creatorRows as $ci => $creator): ?>
                                         <div class="creator-row">
                                             <input type="text" name="rows[<?= $i ?>][creators][<?= $ci ?>][name]" value="<?= h($creator['name'] ?? '') ?>" placeholder="作者名">
-                                            <input type="text" name="rows[<?= $i ?>][creators][<?= $ci ?>][role]" value="<?= h($creator['role'] ?? '作者') ?>" placeholder="役割">
+                                            <input type="text" name="rows[<?= $i ?>][creators][<?= $ci ?>][role]" value="<?= h(($creator['role'] ?? '') === 'author' ? '' : ($creator['role'] ?? '')) ?>" placeholder="役割">
                                             <button type="button" class="light js-remove-creator">×</button>
                                         </div>
                                     <?php endforeach; ?>
@@ -1887,7 +1972,7 @@ document.addEventListener('DOMContentLoaded', function () {
             '<input type="text" name="rows[' + rowIndex + '][creators][' + idx + '][role]" placeholder="役割">' +
             '<button type="button" class="light js-remove-creator">×</button>';
         row.querySelector('input[name$="[name]"]').value = name || '';
-        row.querySelector('input[name$="[role]"]').value = role || '作者';
+        row.querySelector('input[name$="[role]"]').value = role || '';
         editor.insertBefore(row, editor.querySelector('.js-add-creator'));
     }
 
@@ -1917,7 +2002,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (target.classList.contains('js-add-creator')) {
                 const rowIndex = Array.from(tbody.querySelectorAll('tr')).indexOf(tr);
-                addCreator(target.closest('.creator-editor'), rowIndex, '', '作者');
+                addCreator(target.closest('.creator-editor'), rowIndex, '', '');
                 return;
             }
 
@@ -1966,7 +2051,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 '<td class="raw"><input type="hidden" name="rows[' + rowIndex + '][raw]" value=""></td>' +
                 '<td class="row-actions"><button type="button" class="light js-sort-row">並替</button><button type="button" class="danger js-delete-row">削除</button></td>';
             tbody.appendChild(tr);
-            addCreator(tr.querySelector('.creator-editor'), rowIndex, '', '作者');
+            addCreator(tr.querySelector('.creator-editor'), rowIndex, '', '');
         });
     }
 });

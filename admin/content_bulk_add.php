@@ -534,6 +534,9 @@ function normalize_structured_creators($creators) {
 
         $name = mb_convert_kana(trim((string)($creator['name'] ?? '')), 'as', 'UTF-8');
         $role = mb_convert_kana(trim((string)($creator['role'] ?? '')), 'as', 'UTF-8');
+        if ($role === '作者') {
+            $role = 'author';
+        }
 
         if ($name !== '') {
             $items[] = [
