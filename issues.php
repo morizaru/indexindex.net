@@ -53,6 +53,14 @@ function build_issue_page_url($page, $magazine_id, $publisher_id, $year, $keywor
             $query['keyword'] = $keyword;
         }
 
+        if ($sort !== 'issue') {
+            $query['sort'] = $sort;
+        }
+
+        if ($direction !== 'asc') {
+            $query['direction'] = $direction;
+        }
+
         if ($page > 1) {
             $query['page'] = $page;
         }
@@ -103,6 +111,16 @@ function build_issue_page_url($page, $magazine_id, $publisher_id, $year, $keywor
 
     $query_string = http_build_query($query);
     return 'issues.php' . ($query_string !== '' ? '?' . $query_string : '');
+}
+
+function build_issue_list_sort_url($sort_key, $current_sort, $current_direction, $magazine_id, $year, $keyword) {
+    $next_direction = 'asc';
+
+    if ($current_sort === $sort_key && $current_direction === 'asc') {
+        $next_direction = 'desc';
+    }
+
+    return build_issue_page_url(1, $magazine_id, 0, $year, $keyword, $sort_key, $next_direction);
 }
 
 function build_issues_sort_url($sort_key, $current_sort, $current_direction, $publisher_id, $year, $keyword, $filter_magazine_id = null, $publisher_keyword = null, $magazine_keyword = null, $year_keyword = null) {
@@ -183,23 +201,25 @@ $year_keyword = isset($_GET['year_keyword']) ? trim((string)$_GET['year_keyword'
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $perPage = 50;
 
-$sort = $_GET['sort'] ?? 'magazine';
+$sort = $_GET['sort'] ?? ($magazine_id > 0 ? 'issue' : 'magazine');
 $direction = strtolower($_GET['direction'] ?? 'asc');
 
-$allowed_sorts = ['magazine', 'publisher'];
+$allowed_sorts = $magazine_id > 0
+    ? ['issue', 'year', 'count']
+    : ['magazine', 'publisher'];
 $allowed_directions = ['asc', 'desc'];
 
 if (!in_array($sort, $allowed_sorts, true)) {
-    $sort = 'magazine';
+    $sort = $magazine_id > 0 ? 'issue' : 'magazine';
 }
 
 if (!in_array($direction, $allowed_directions, true)) {
     $direction = 'asc';
 }
 
-if ($sort === 'magazine') {
+if ($magazine_id <= 0 && $sort === 'magazine') {
     $magazine_order_sql = "m.name {$direction}, p.name ASC, m.id ASC";
-} else {
+} elseif ($magazine_id <= 0) {
     $magazine_order_sql = "p.name {$direction}, m.name ASC, m.id ASC";
 }
 
@@ -252,23 +272,39 @@ $publication_year_sql = "
     END
 ";
 
-$issue_number_order_sql = "
+$issue_label_year_char_sql = "CONVERT(UNHEX('E5B9B4') USING utf8mb4)";
+$issue_label_month_char_sql = "CONVERT(UNHEX('E69C88') USING utf8mb4)";
+$issue_label_year_pos_sql = "LOCATE({$issue_label_year_char_sql}, mi.issue_label)";
+$issue_label_month_pos_sql = "LOCATE({$issue_label_month_char_sql}, mi.issue_label, {$issue_label_year_pos_sql} + 1)";
+$issue_label_month_value_sql = "
+    SUBSTRING(
+        mi.issue_label,
+        {$issue_label_year_pos_sql} + CHAR_LENGTH({$issue_label_year_char_sql}),
+        {$issue_label_month_pos_sql} - {$issue_label_year_pos_sql} - CHAR_LENGTH({$issue_label_year_char_sql})
+    )
+";
+$issue_label_month_order_sql = "
     CASE
-        WHEN mi.issue_no REGEXP '^[0-9]+' THEN 0
-        WHEN mi.publication_month BETWEEN 1 AND 12 THEN 0
-        WHEN TRIM(mi.issue_label) REGEXP '^[0-9]+' THEN 0
-        ELSE 1
-    END ASC,
+        WHEN {$issue_label_year_pos_sql} > 0
+             AND {$issue_label_month_pos_sql} > {$issue_label_year_pos_sql}
+             AND {$issue_label_month_value_sql} REGEXP '^[0-9]{1,2}$'
+        THEN CAST({$issue_label_month_value_sql} AS UNSIGNED)
+        ELSE NULL
+    END
+";
+
+$issue_number_value_sql = "
     CASE
         WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
         WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
+        WHEN {$issue_label_month_order_sql} BETWEEN 1 AND 12 THEN {$issue_label_month_order_sql}
         WHEN TRIM(mi.issue_label) REGEXP '^[0-9]+'
         THEN CAST(TRIM(mi.issue_label) AS UNSIGNED)
-        ELSE 999999
-    END ASC
+        ELSE NULL
+    END
 ";
 
-$issue_date_order_sql = "
+$issue_date_order_asc_sql = "
     COALESCE(
         NULLIF(mi.release_date, '0000-00-00'),
         NULLIF(mi.publication_date, '0000-00-00'),
@@ -285,6 +321,39 @@ $issue_date_order_sql = "
         STR_TO_DATE(CONCAT(mi.issue_year, '-01-01'), '%Y-%m-%d'),
         STR_TO_DATE('9999-12-31', '%Y-%m-%d')
     )
+";
+
+$issue_date_order_desc_sql = "
+    COALESCE(
+        NULLIF(mi.release_date, '0000-00-00'),
+        NULLIF(mi.publication_date, '0000-00-00'),
+        STR_TO_DATE(
+            CONCAT(
+                mi.publication_year,
+                '-',
+                LPAD(COALESCE(mi.publication_month, 1), 2, '0'),
+                '-',
+                LPAD(COALESCE(mi.publication_day, 1), 2, '0')
+            ),
+            '%Y-%m-%d'
+        ),
+        STR_TO_DATE(CONCAT(mi.issue_year, '-01-01'), '%Y-%m-%d'),
+        STR_TO_DATE('0000-01-01', '%Y-%m-%d')
+    )
+";
+
+$issue_order_asc_sql = "
+    COALESCE({$publication_year_sql}, 9999) ASC,
+    COALESCE({$issue_number_value_sql}, 999999) ASC,
+    {$issue_date_order_asc_sql} ASC,
+    mi.id ASC
+";
+
+$issue_order_desc_sql = "
+    COALESCE({$publication_year_sql}, 0) DESC,
+    COALESCE({$issue_number_value_sql}, 0) DESC,
+    {$issue_date_order_desc_sql} DESC,
+    mi.id DESC
 ";
 
 // 出版社一覧：目次が1件以上ある公開対象の雑誌号だけを対象にする
@@ -656,6 +725,19 @@ if ($magazine_id > 0) {
     $from_count = $total_issues > 0 ? $offset + 1 : 0;
     $to_count = min($offset + $perPage, $total_issues);
 
+    $issue_order_by_map = [
+        'issue' => $direction === 'desc' ? $issue_order_desc_sql : $issue_order_asc_sql,
+        'year' => "
+            COALESCE({$publication_year_sql}, " . ($direction === 'desc' ? '0' : '9999') . ") " . strtoupper($direction) . ",
+            {$issue_order_asc_sql}
+        ",
+        'count' => "
+            content_count " . strtoupper($direction) . ",
+            {$issue_order_asc_sql}
+        ",
+    ];
+    $issue_order_by_sql = $issue_order_by_map[$sort];
+
     // その雑誌の号一覧
     $stmt = $pdo->prepare("
         SELECT
@@ -678,32 +760,7 @@ if ($magazine_id > 0) {
           AND {$public_issue_status_sql}
           {$issue_keyword_where_sql}
         GROUP BY mi.id
-        ORDER BY
-            {$publication_year_sql} ASC,
-            {$issue_number_order_sql},
-            {$issue_date_order_sql} ASC,
-            CASE
-                WHEN mi.publication_date IS NOT NULL
-                     AND mi.publication_date <> ''
-                     AND mi.publication_date <> '0000-00-00'
-                THEN mi.publication_date
-                ELSE '9999-12-31'
-            END ASC,
-            CASE
-                WHEN mi.release_date IS NOT NULL
-                     AND mi.release_date <> ''
-                     AND mi.release_date <> '0000-00-00'
-                THEN mi.release_date
-                ELSE '9999-12-31'
-            END ASC,
-            CASE
-                WHEN mi.issue_no REGEXP '^[0-9]+' THEN CAST(mi.issue_no AS UNSIGNED)
-                WHEN mi.publication_month BETWEEN 1 AND 12 THEN mi.publication_month
-                WHEN TRIM(mi.issue_label) REGEXP '^[0-9]+'
-                THEN CAST(TRIM(mi.issue_label) AS UNSIGNED)
-                ELSE 999999
-            END ASC,
-            mi.id ASC
+        ORDER BY {$issue_order_by_sql}
         LIMIT :limit OFFSET :offset
     ");
     $stmt->bindValue(':magazine_id', $magazine_id, PDO::PARAM_INT);
@@ -1562,6 +1619,12 @@ require_once __DIR__ . '/includes/header.php';
                         <?php if ($year > 0): ?>
                             <input type="hidden" name="year" value="<?= h($year) ?>">
                         <?php endif; ?>
+                        <?php if ($sort !== 'issue'): ?>
+                            <input type="hidden" name="sort" value="<?= h($sort) ?>">
+                        <?php endif; ?>
+                        <?php if ($direction !== 'asc'): ?>
+                            <input type="hidden" name="direction" value="<?= h($direction) ?>">
+                        <?php endif; ?>
                         <input type="number" name="page" min="1" max="<?= h($total_pages) ?>" value="<?= h($page) ?>" aria-label="ページ番号">
                         <button type="submit">移動</button>
                     </form>
@@ -1577,9 +1640,21 @@ require_once __DIR__ . '/includes/header.php';
                 <table id="issuesTable">
                     <thead>
                         <tr>
-                            <th>号</th>
-                            <th class="year">発行年</th>
-                            <th class="num">目次件数</th>
+                            <th>
+                                <a class="sort-link" href="<?= h(build_issue_list_sort_url('issue', $sort, $direction, $magazine_id, $year, $keyword)) ?>">
+                                    号<?= h(sort_mark('issue', $sort, $direction)) ?>
+                                </a>
+                            </th>
+                            <th class="year">
+                                <a class="sort-link" href="<?= h(build_issue_list_sort_url('year', $sort, $direction, $magazine_id, $year, $keyword)) ?>">
+                                    発行年<?= h(sort_mark('year', $sort, $direction)) ?>
+                                </a>
+                            </th>
+                            <th class="num">
+                                <a class="sort-link" href="<?= h(build_issue_list_sort_url('count', $sort, $direction, $magazine_id, $year, $keyword)) ?>">
+                                    目次件数<?= h(sort_mark('count', $sort, $direction)) ?>
+                                </a>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1664,6 +1739,12 @@ require_once __DIR__ . '/includes/header.php';
                             <input type="hidden" name="magazine_id" value="<?= h($magazine_id) ?>">
                             <?php if ($year > 0): ?>
                                 <input type="hidden" name="year" value="<?= h($year) ?>">
+                            <?php endif; ?>
+                            <?php if ($sort !== 'issue'): ?>
+                                <input type="hidden" name="sort" value="<?= h($sort) ?>">
+                            <?php endif; ?>
+                            <?php if ($direction !== 'asc'): ?>
+                                <input type="hidden" name="direction" value="<?= h($direction) ?>">
                             <?php endif; ?>
                             <input type="number" name="page" min="1" max="<?= h($total_pages) ?>" value="<?= h($page) ?>" aria-label="ページ番号">
                             <button type="submit">移動</button>
