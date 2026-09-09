@@ -669,10 +669,12 @@ require_once __DIR__ . '/includes/header.php';
 
     <h1>詳細検索</h1>
 
-    <div class="page-description">
-        <p><strong>INDEXINDEX検索について</strong></p>
-        <p>INDEXINDEXに登録されている漫画雑誌の目次情報を、作品名、作者名、雑誌名から検索できます。検索結果から、雑誌号・作品・人物の詳細ページへ移動し、掲載順、開始ページ、掲載号などを確認できます。</p>
-    </div>
+    <?php if ($q === ''): ?>
+        <div class="page-description">
+            <p><strong>INDEXINDEX検索について</strong></p>
+            <p>INDEXINDEXに登録されている漫画雑誌の目次情報を、作品名、作者名、雑誌名から検索できます。検索結果から、雑誌号・作品・人物の詳細ページへ移動し、掲載順、開始ページ、掲載号などを確認できます。</p>
+        </div>
+    <?php endif; ?>
 
     <form method="get" action="search.php" class="search-form">
         <div class="search-box">
