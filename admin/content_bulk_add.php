@@ -6,6 +6,7 @@ session_start();
 header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/../app/config.php';
+require_once __DIR__ . '/../app/content_creators.php';
 
 if (empty($_SESSION['content_bulk_csrf_token'])) {
     $_SESSION['content_bulk_csrf_token'] = bin2hex(random_bytes(32));
@@ -593,34 +594,21 @@ function escape_like_bulk($value) {
     ]);
 }
 
-function lookup_creators_by_title($pdo, $title) {
+function lookup_creators_by_title($pdo, $title, $selected_work_id = 0) {
     $title = mb_convert_kana(trim((string)$title), 'as', 'UTF-8');
 
     if ($title === '') {
         return '';
     }
 
-    $stmt = $pdo->prepare("
-        SELECT id
-        FROM works
-        WHERE title LIKE :like_title ESCAPE '\\\\'
-          AND title IS NOT NULL
-          AND title <> ''
-        ORDER BY
-            CASE
-                WHEN title = :exact_title THEN 0
-                WHEN title LIKE :prefix_title ESCAPE '\\\\' THEN 1
-                ELSE 2
-            END ASC,
-            CHAR_LENGTH(title) ASC,
-            title ASC
-        LIMIT 2
-    ");
-    $stmt->execute([
-        ':like_title' => '%' . escape_like_bulk($title) . '%',
-        ':exact_title' => $title,
-        ':prefix_title' => escape_like_bulk($title) . '%',
-    ]);
+    $stmt = $pdo->prepare($selected_work_id > 0
+        ? 'SELECT id FROM works WHERE id = :id AND title = :title'
+        : 'SELECT id FROM works WHERE BINARY title = BINARY :title LIMIT 2');
+    $params = [':title' => $title];
+    if ($selected_work_id > 0) {
+        $params[':id'] = $selected_work_id;
+    }
+    $stmt->execute($params);
     $works = $stmt->fetchAll();
 
     if (count($works) !== 1) {
@@ -632,18 +620,16 @@ function lookup_creators_by_title($pdo, $title) {
     $stmt = $pdo->prepare("
         SELECT
             c.name,
-            MIN(cc.display_order) AS display_order,
-            MIN(ic.id) AS content_id
-        FROM issue_contents ic
-        JOIN content_creators cc ON ic.id = cc.content_id
+            cc.role,
+            cc.display_order
+        FROM work_creators cc
         JOIN creators c ON cc.creator_id = c.id
-        WHERE ic.work_id = :work_id
+        WHERE cc.work_id = :work_id
           AND c.name IS NOT NULL
           AND c.name <> ''
-        GROUP BY c.id, c.name
         ORDER BY
             display_order ASC,
-            content_id ASC,
+            cc.id ASC,
             c.name ASC
     ");
     $stmt->execute([
@@ -659,7 +645,7 @@ function lookup_creators_by_title($pdo, $title) {
     foreach ($creators as $creator) {
         $name = trim((string)$creator['name']);
         if ($name !== '') {
-            $names[] = $name;
+            $names[] = ($creator['role'] !== '' ? $creator['role'] . '：' : '') . $name;
         }
     }
 
@@ -668,7 +654,7 @@ function lookup_creators_by_title($pdo, $title) {
 
 if (isset($_GET['action']) && $_GET['action'] === 'lookup_creators_by_title') {
     send_creator_lookup_json([
-        'creators' => lookup_creators_by_title($pdo, $_GET['title'] ?? '')
+        'creators' => lookup_creators_by_title($pdo, $_GET['title'] ?? '', (int)($_GET['work_id'] ?? 0))
     ]);
 }
 
@@ -894,10 +880,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception(($i + 1) . '行目：タイトルを入力してください。');
             }
 
-            if ($creator_name === '' && empty($creators)) {
-                throw new Exception(($i + 1) . '行目：作者名を入力してください。');
-            }
-
             if (!empty($creators)) {
                 $creator_rows = $creators;
             } else {
@@ -913,10 +895,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'output' => $creator_rows,
                     'debug_html' => debug_split_creator_names($creator_name),
                 ];
-            }
-
-            if (empty($creator_rows)) {
-                throw new Exception(($i + 1) . '行目：作者名を入力してください。');
             }
 
             $episode_no_error = validate_episode_no_bulk($episode_no, $i + 1);
@@ -983,6 +961,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $inserted_count = 0;
+        $creator_writer = new ContentCreatorWriter($pdo);
 
         foreach ($valid_rows as $row) {
             $work_id = get_or_create_work_id($pdo, $row['title_main'], $row['publication_type'], $row['work_id']);
@@ -1033,6 +1012,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $content_id = (int)$pdo->lastInsertId();
+            // 新規目次のロックはINSERT時に取得済み。人物ごとのSELECTは不要。
+            $copied_count = $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
+            if ($copied_count === 0 && empty($row['creator_rows'])) {
+                throw new Exception($row['input_order'] . '行目：作品に人物が未登録のため、作者名を入力してください。');
+            }
 
             $display_order = 1;
             $creator_rows = $row['creator_rows'];
@@ -1062,30 +1046,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $creator_id = get_or_create_creator_id($pdo, $creator_name_one);
                 $role_id = get_or_create_role_id_bulk($pdo, $creator_role);
 
-                $stmt = $pdo->prepare("
-                    INSERT INTO content_creators (
-                        content_id,
-                        creator_id,
-                        role_id,
-                        role,
-                        display_order,
-                        is_visible
-                    ) VALUES (
-                        :content_id,
-                        :creator_id,
-                        :role_id,
-                        :role,
-                        :display_order,
-                        1
-                    )
-                ");
-                $stmt->execute([
-                    ':content_id' => $content_id,
-                    ':creator_id' => $creator_id,
-                    ':role_id' => $role_id,
-                    ':role' => $creator_role,
-                    ':display_order' => $display_order
-                ]);
+                $creator_writer->insertIfMissing(
+                    $content_id, $creator_id, $role_id, $creator_role, $display_order, 1
+                );
 
                 $display_order++;
             }
@@ -1742,7 +1705,7 @@ if ($issue_id > 0) {
             function showCreatorAutofillNote(row) {
                 const note = row.querySelector('.creator-autofill-note');
                 if (note) {
-                    note.textContent = '既存作品から作者を自動入力しました';
+                    note.textContent = '作品の人物：' + row.dataset.workCreators + '（保存時に表示設定も取り込みます）';
                     note.classList.add('is-visible');
                 }
             }
@@ -1767,9 +1730,11 @@ if ($issue_id > 0) {
 
                 hideCreatorAutofillNote(row);
 
+                const workId = row.querySelector('input[name$="[work_id]"]').value;
                 const params = new URLSearchParams({
                     action: 'lookup_creators_by_title',
-                    title: title
+                    title: title,
+                    work_id: workId
                 });
 
                 fetch('content_bulk_add.php?' + params.toString(), {
@@ -1787,12 +1752,13 @@ if ($issue_id > 0) {
                     .then(function (data) {
                         if (
                             titleInput.value.trim() === title &&
+                            row.querySelector('input[name$="[work_id]"]').value === workId &&
                             creatorInput.value.trim() === '' &&
                             data &&
                             typeof data.creators === 'string' &&
                             data.creators !== ''
                         ) {
-                            creatorInput.value = data.creators;
+                            row.dataset.workCreators = data.creators;
                             showCreatorAutofillNote(row);
                         } else {
                             hideCreatorAutofillNote(row);
@@ -2009,6 +1975,7 @@ if ($issue_id > 0) {
             </select>
             <div class="help">
                 入力した行だけ登録します。読切・出張掲載が未チェックの場合は「連載」として登録します。話数は数字だけで保存します。複数人入力は「まんが:〇〇, 原案:△△」のように半角カンマ区切りで入力できます。
+                作品に登録済みの人物は表示設定も含めて保存時に取り込みます。作者名は、その号だけの人物を追加する場合に入力してください。
             </div>
         </div>
 

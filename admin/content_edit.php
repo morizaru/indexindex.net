@@ -4,6 +4,7 @@
 header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/../app/config.php';
+require_once __DIR__ . '/../app/content_creators.php';
 
 function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -60,19 +61,23 @@ function normalize_creator_rows($posted_rows) {
             continue;
         }
 
-        $creator_name = mb_convert_kana(trim((string)($row['creator_name'] ?? '')), 'as', 'UTF-8');
+        $existing_id = (int)($row['id'] ?? 0);
+        $creator_name = $existing_id > 0
+            ? (string)($row['creator_name'] ?? '')
+            : mb_convert_kana(trim((string)($row['creator_name'] ?? '')), 'as', 'UTF-8');
 
-        if ($creator_name === '') {
+        if (trim($creator_name) === '') {
             continue;
         }
 
-        $role = mb_convert_kana(trim((string)($row['role'] ?? '')), 'as', 'UTF-8');
-        if ($role === '') {
-            $role = 'author';
-        }
+        $role = $existing_id > 0
+            ? (string)($row['role'] ?? '')
+            : mb_convert_kana(trim((string)($row['role'] ?? '')), 'as', 'UTF-8');
 
         $display_order_raw = trim((string)($row['display_order'] ?? ''));
-        if ($display_order_raw !== '' && preg_match('/^[0-9]+$/', $display_order_raw)) {
+        if ($existing_id > 0 && preg_match('/^-?[0-9]+$/', $display_order_raw)) {
+            $display_order = (int)$display_order_raw;
+        } elseif ($display_order_raw !== '' && preg_match('/^[0-9]+$/', $display_order_raw)) {
             $display_order = (int)$display_order_raw;
             if ($display_order <= 0) {
                 $display_order = $auto_order;
@@ -86,6 +91,7 @@ function normalize_creator_rows($posted_rows) {
         $is_visible = (isset($row['is_visible']) && (string)$row['is_visible'] === '1') ? 1 : 0;
 
         $rows[] = [
+            'id' => (int)($row['id'] ?? 0),
             'role_id' => $role_id,
             'role' => $role,
             'creator_name' => $creator_name,
@@ -242,10 +248,14 @@ $episode_title = $content['episode_title'];
 $episode_no = $content['episode_no'];
 $note = $content['note'];
 
-$stmt = $pdo->prepare("
+$sql_creators = "
     SELECT
+        cc.id,
+        cc.creator_id,
         cc.role_id,
         cc.role,
+        cc.display_name,
+        cc.display_affiliation,
         cc.display_order,
         cc.is_visible,
         c.name AS creator_name
@@ -255,11 +265,13 @@ $stmt = $pdo->prepare("
     ORDER BY
         cc.display_order ASC,
         cc.id ASC
-");
+";
+$stmt = $pdo->prepare($sql_creators);
 $stmt->execute([
     ':content_id' => $content_id
 ]);
-$creator_rows = $stmt->fetchAll();
+$creator_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$creator_revision = hash('sha256', serialize($creator_rows));
 
 if (empty($creator_rows)) {
     $creator_rows = [
@@ -317,6 +329,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             $pdo->beginTransaction();
+            $creator_writer = new ContentCreatorWriter($pdo);
+            $creator_writer->lockContent($content_id);
+            $stmt = $pdo->prepare($sql_creators);
+            $stmt->execute([':content_id' => $content_id]);
+            $stored_creator_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (!hash_equals(hash('sha256', serialize($stored_creator_rows)), (string)($_POST['creator_revision'] ?? ''))) {
+                throw new Exception('人物情報が更新されています。画面を再読み込みして編集し直してください。');
+            }
 
             // 作品を取得、なければ追加
             $stmt = $pdo->prepare("
@@ -395,44 +415,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':id' => $content_id
             ]);
 
-            // 作者紐付けを一旦削除して再登録
-            $stmt = $pdo->prepare("
-                DELETE FROM content_creators
-                WHERE content_id = :content_id
-            ");
-            $stmt->execute([
-                ':content_id' => $content_id
-            ]);
-
-            $stmt = $pdo->prepare("
-                INSERT INTO content_creators (
-                    content_id,
-                    creator_id,
-                    role_id,
-                    role,
-                    display_order,
-                    is_visible
-                ) VALUES (
-                    :content_id,
-                    :creator_id,
-                    :role_id,
-                    :role,
-                    :display_order,
-                    :is_visible
-                )
-            ");
-
+            // 行IDを維持し、掲載時の表示名・所属には触れない。
+            $stored_by_id = [];
+            foreach ($stored_creator_rows as $stored_row) {
+                $stored_by_id[(int)$stored_row['id']] = $stored_row;
+            }
+            $kept_ids = [];
+            $update_creator = $pdo->prepare('
+                UPDATE content_creators
+                SET creator_id = ?, role_id = ?, role = ?, display_order = ?, is_visible = ?
+                WHERE id = ? AND content_id = ?
+            ');
+            $check_duplicate = $pdo->prepare('
+                SELECT id FROM content_creators
+                WHERE content_id = ? AND creator_id = ? AND role = ? AND id <> ? LIMIT 1
+            ');
+            // 明示的にフォームから削除された行だけを削除。
+            $submitted_ids = array_column($creator_rows, 'id');
+            $delete_creator = $pdo->prepare('DELETE FROM content_creators WHERE id = ? AND content_id = ?');
+            foreach ($stored_by_id as $id => $stored_row) {
+                if (!in_array($id, $submitted_ids, true)) {
+                    $delete_creator->execute([$id, $content_id]);
+                }
+            }
             foreach ($creator_rows as $creator_row) {
-                $creator_id = resolve_creator_id($pdo, $creator_row['creator_name']);
-
-                $stmt->execute([
-                    ':content_id' => $content_id,
-                    ':creator_id' => $creator_id,
-                    ':role_id' => $creator_row['role_id'],
-                    ':role' => $creator_row['role'],
-                    ':display_order' => $creator_row['display_order'],
-                    ':is_visible' => $creator_row['is_visible']
-                ]);
+                $id = $creator_row['id'];
+                if ($id < 0 || ($id > 0 && (!isset($stored_by_id[$id]) || isset($kept_ids[$id])))) {
+                    throw new Exception('人物行の指定が不正です。');
+                }
+                $old = $id > 0 ? $stored_by_id[$id] : null;
+                $creator_id = $old && $old['creator_name'] === $creator_row['creator_name']
+                    ? (int)$old['creator_id'] : resolve_creator_id($pdo, $creator_row['creator_name']);
+                $role_id = $old && $old['role'] === $creator_row['role']
+                    ? $old['role_id'] : $creator_writer->findRoleId($creator_row['role']);
+                if ($id > 0) {
+                    // 既存重複は保持するが、人物・役割の変更で重複を増やさない。
+                    if ((int)$old['creator_id'] !== $creator_id || $old['role'] !== $creator_row['role']) {
+                        $check_duplicate->execute([$content_id, $creator_id, $creator_row['role'], $id]);
+                        if ($check_duplicate->fetchColumn() !== false) {
+                            throw new Exception('同じ人物・役割がすでに登録されています。');
+                        }
+                    }
+                    $update_creator->execute([
+                        $creator_id, $role_id, $creator_row['role'], $creator_row['display_order'],
+                        $creator_row['is_visible'], $id, $content_id,
+                    ]);
+                    $kept_ids[$id] = true;
+                } else {
+                    $creator_writer->insertIfMissing(
+                        $content_id, $creator_id, $role_id, $creator_row['role'],
+                        $creator_row['display_order'], $creator_row['is_visible']
+                    );
+                }
+            }
+            // 作品変更でも自動置換しない。明示操作時だけ不足分を追加。
+            if (isset($_POST['import_work_creators'])) {
+                $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
             }
 
             // 開始ページ順で掲載順を振り直す
@@ -875,8 +913,10 @@ $existing_contents = $stmt->fetchAll();
                 作者
             </label>
             <div class="creator-list" id="creatorList">
+                <input type="hidden" name="creator_revision" value="<?= h($_POST['creator_revision'] ?? $creator_revision) ?>">
                 <?php foreach ($creator_rows as $index => $creator_row): ?>
                     <div class="creator-row">
+                        <input type="hidden" name="creators[<?= h($index) ?>][id]" value="<?= h($creator_row['id'] ?? 0) ?>">
                         <label class="creator-visible">
                             <input
                                 type="hidden"
@@ -920,8 +960,10 @@ $existing_contents = $stmt->fetchAll();
             </div>
             <button type="button" class="creator-add" id="addCreatorButton">＋ 作者を追加</button>
             <div class="help">
-                作者名が空欄の行は保存されません。役割が空欄の場合は author として保存します。
+                作者名が空欄の行は保存されません。役割の空欄はそのまま保存します。
             </div>
+            <label><input type="checkbox" name="import_work_creators" value="1" <?= isset($_POST['import_work_creators']) ? 'checked' : '' ?>> 保存時に作品の人物を不足分だけ追加する</label>
+            <div class="help">作品を変更しても登録済みの人物・表示設定は保持します。追加する人物には作品の表示初期値を使用します。</div>
         </div>
 
         <div class="form-row">

@@ -4,6 +4,7 @@
 header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/../app/config.php';
+require_once __DIR__ . '/../app/content_creators.php';
 
 function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -362,35 +363,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $content_id = (int)$pdo->lastInsertId();
 
-            // 4. 目次と作者を紐付け
-            $stmt = $pdo->prepare("
-                INSERT INTO content_creators (
-                    content_id,
-                    creator_id,
-                    role_id,
-                    role,
-                    display_order,
-                    is_visible
-                ) VALUES (
-                    :content_id,
-                    :creator_id,
-                    :role_id,
-                    :role,
-                    :display_order,
-                    1
-                )
-            ");
+            // 作品の人物を先にコピーし、手入力は不足分だけ追加する。
+            $creator_writer = new ContentCreatorWriter($pdo);
+            // INSERT済みの新規目次は、このトランザクションがロックを保持している。
+            $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
 
             foreach ($creator_rows as $creator_row) {
                 $creator_id = resolve_creator_id($pdo, $creator_row['creator_name']);
 
-                $stmt->execute([
-                    ':content_id' => $content_id,
-                    ':creator_id' => $creator_id,
-                    ':role_id' => $creator_row['role_id'],
-                    ':role' => $creator_row['role'],
-                    ':display_order' => $creator_row['display_order']
-                ]);
+                $creator_writer->insertIfMissing(
+                    $content_id, $creator_id,
+                    $creator_writer->findRoleId($creator_row['role']),
+                    $creator_row['role'], $creator_row['display_order'], 1
+                );
             }
 
             // 5. 開始ページ順で掲載順を振り直す
