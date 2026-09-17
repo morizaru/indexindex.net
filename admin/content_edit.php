@@ -1,5 +1,6 @@
 <?php
 // admin/content_edit.php
+require_once __DIR__ . '/content_creator_display.php';
 
 header('Content-Type: text/html; charset=UTF-8');
 
@@ -504,20 +505,9 @@ $stmt = $pdo->prepare("
         ic.title_main,
         ic.publication_type,
         ic.is_new_series,
-        ic.is_final_episode,
-        GROUP_CONCAT(c.name ORDER BY cc.display_order SEPARATOR '、') AS creator_names
-    FROM issue_contents ic
-    LEFT JOIN content_creators cc ON ic.id = cc.content_id
-    LEFT JOIN creators c ON cc.creator_id = c.id
-    WHERE ic.issue_id = :issue_id
-    GROUP BY
-        ic.id,
-        ic.sort_order,
-        ic.page_start,
-        ic.title_main,
-        ic.publication_type,
-        ic.is_new_series,
         ic.is_final_episode
+    FROM issue_contents ic
+    WHERE ic.issue_id = :issue_id
     ORDER BY
         ic.sort_order ASC,
         CASE
@@ -531,6 +521,7 @@ $stmt->execute([
     ':issue_id' => $issue_id
 ]);
 $existing_contents = $stmt->fetchAll();
+$content_creators_by_id = load_issue_content_creators($pdo, $issue_id);
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -1002,7 +993,7 @@ $existing_contents = $stmt->fetchAll();
                     <td><?= h($row['sort_order']) ?></td>
                     <td><?= h($row['page_start']) ?></td>
                     <td><?= h($row['title_main']) ?></td>
-                    <td><?= h($row['creator_names']) ?></td>
+                    <td><?= render_admin_content_creators($content_creators_by_id[(int)$row['id']] ?? []) ?></td>
                     <td>
                         <?php if (!empty($row['publication_type'])): ?>
                             <span class="badge"><?= h($row['publication_type']) ?></span>

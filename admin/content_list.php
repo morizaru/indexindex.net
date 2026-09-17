@@ -1,5 +1,6 @@
 <?php
 // admin/content_list.php
+require_once __DIR__ . '/content_creator_display.php';
 
 header('Content-Type: text/html; charset=UTF-8');
 
@@ -365,23 +366,10 @@ if ($issue_id > 0) {
             w.title_sub,
             ic.episode_title,
             ic.episode_no,
-            ic.note,
-            GROUP_CONCAT(
-                DISTINCT
-                CASE
-                    WHEN r.name IS NOT NULL AND r.name <> '' THEN CONCAT(r.name, '：', c.name)
-                    ELSE c.name
-                END
-                ORDER BY cc.display_order
-                SEPARATOR ' / '
-            ) AS creators
+            ic.note
         FROM issue_contents ic
         LEFT JOIN works w ON ic.work_id = w.id
-        LEFT JOIN content_creators cc ON ic.id = cc.content_id
-        LEFT JOIN creators c ON cc.creator_id = c.id
-        LEFT JOIN roles r ON cc.role_id = r.id
         WHERE ic.issue_id = :issue_id
-        GROUP BY ic.id
         ORDER BY ic.sort_order ASC, ic.id ASC
     ";
 
@@ -391,6 +379,7 @@ if ($issue_id > 0) {
     ]);
     $contents = $stmt->fetchAll();
 }
+$content_creators_by_id = load_issue_content_creators($pdo, $issue_id);
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -924,7 +913,7 @@ if ($issue_id > 0) {
 
                         <td class="episode"><?= h($row['episode_no'] ?? '') ?></td>
 
-                        <td class="creators"><?= h($row['creators'] ?? '') ?></td>
+                        <td class="creators"><?= render_admin_content_creators($content_creators_by_id[(int)$row['id']] ?? []) ?></td>
 
                         <td class="note-cell">
                             <?php if (!empty($row['note'])): ?>

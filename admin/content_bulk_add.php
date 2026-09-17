@@ -1,5 +1,6 @@
 <?php
 // admin/content_bulk_add.php
+require_once __DIR__ . '/content_creator_display.php';
 
 session_start();
 
@@ -1123,23 +1124,9 @@ if ($issue_id > 0) {
             ic.publication_type,
             ic.is_new_series,
             ic.is_final_episode,
-            ic.note,
-            GROUP_CONCAT(c.name ORDER BY cc.display_order SEPARATOR '、') AS creator_names
-        FROM issue_contents ic
-        LEFT JOIN content_creators cc ON ic.id = cc.content_id
-        LEFT JOIN creators c ON cc.creator_id = c.id
-        WHERE ic.issue_id = :issue_id
-        GROUP BY
-            ic.id,
-            ic.sort_order,
-            ic.page_start,
-            ic.title_main,
-            ic.episode_no,
-            ic.episode_title,
-            ic.publication_type,
-            ic.is_new_series,
-            ic.is_final_episode,
             ic.note
+        FROM issue_contents ic
+        WHERE ic.issue_id = :issue_id
         ORDER BY
             ic.sort_order ASC,
             CASE
@@ -1154,6 +1141,7 @@ if ($issue_id > 0) {
     ]);
     $existing_contents = $stmt->fetchAll();
 }
+$content_creators_by_id = load_issue_content_creators($pdo, $issue_id);
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -2183,7 +2171,7 @@ if ($issue_id > 0) {
                         <td><?= h($content['title_main']) ?></td>
                         <td><?= h($content['episode_no']) ?></td>
                         <td><?= h($content['episode_title']) ?></td>
-                        <td><?= h($content['creator_names']) ?></td>
+                        <td><?= render_admin_content_creators($content_creators_by_id[(int)$content['id']] ?? []) ?></td>
                         <td>
                             <?php if (!empty($content['publication_type'])): ?>
                                 <span class="badge"><?= h($content['publication_type']) ?></span>
