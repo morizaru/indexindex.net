@@ -4,6 +4,9 @@
 header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/../app/config.php';
+require_once __DIR__ . '/../app/work_creators.php';
+require_once __DIR__ . '/../app/work_admin.php';
+work_admin_start_session();
 
 function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -68,6 +71,14 @@ $title_kana = $work['title_kana'] ?? '';
 $publication_type = $work['publication_type'] ?? '連載';
 $episode_format_id = isset($work['episode_format_id']) ? (int)$work['episode_format_id'] : 0;
 
+$creator_editor = new WorkCreatorEditor($pdo);
+$creator_rows = $creator_editor->rows($work_id);
+$creators_fingerprint = WorkCreatorEditor::fingerprint($creator_rows);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $creator_rows = is_array($_POST['work_creators'] ?? null) ? array_values($_POST['work_creators']) : [];
+    $creators_fingerprint = (string)($_POST['creators_fingerprint'] ?? '');
+}
+
 // 更新処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($_POST['title'] ?? '');
@@ -82,6 +93,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = '掲載フラグが不正です。';
     } else {
         try {
+            work_admin_check_csrf($_POST['csrf_token'] ?? null);
+            work_admin_validate_title($title, $title_sub, $title_kana, $publication_type);
+            if (($_POST['creators_present'] ?? '') !== '1') {
+                throw new RuntimeException('人物フォームが不足しています。再読み込みしてください。');
+            }
+            work_admin_require_transactions($pdo, ['works', 'work_creators', 'issue_contents']);
+            $pdo->beginTransaction();
+            $creator_editor->save($work_id, $creator_rows, $creators_fingerprint);
             // 話数フォーマット存在チェック
             if ($episode_format_id > 0) {
                 $stmt = $pdo->prepare("
@@ -115,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $exists = $stmt->fetch();
 
             if ($exists) {
-                $error = '同じ作品名がすでに登録されています。';
+                throw new RuntimeException('同じ作品名がすでに登録されています。');
             } else {
                 $stmt = $pdo->prepare("
                     UPDATE works
@@ -147,10 +166,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':work_id' => $work_id
                 ]);
 
+                $pdo->commit();
                 header('Location: work_edit.php?id=' . $work_id . '&saved=1');
                 exit;
             }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $error = '更新エラー：' . $e->getMessage();
         }
     }
@@ -562,6 +583,7 @@ foreach ($episode_formats as $format) {
     <form method="post" action="work_edit.php?id=<?= h($work_id) ?>">
 
         <input type="hidden" name="id" value="<?= h($work_id) ?>">
+        <input type="hidden" name="csrf_token" value="<?= h($_SESSION['work_admin_csrf']) ?>">
 
         <div class="form-row">
             <label>
@@ -612,6 +634,7 @@ foreach ($episode_formats as $format) {
             </div>
         </div>
 
+        <?php require __DIR__ . '/work_creator_fields.php'; ?>
         <button type="submit">更新する</button>
 
     </form>

@@ -566,6 +566,7 @@ $works = $stmt->fetchAll();
 <div class="container">
 
     <h1>作品一覧</h1>
+    <p><a class="button-link" href="work_add.php">作品を追加</a></p>
 
     <div class="nav">
         <a href="index.php">管理トップ</a>
