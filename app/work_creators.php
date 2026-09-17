@@ -109,13 +109,22 @@ class WorkCreatorEditor
                 $value = $stmt->fetchColumn();
                 $roleId = $value === false ? null : (int)$value;
             }
+            // Explicit checkbox state wins, including OFF on an otherwise visible role.
+            // Old forms without this field retain the previous role-based behavior.
+            $visible = $roleChanged ? self::defaultVisible($role) : (int)$old['default_visible'];
+            if (array_key_exists('default_visible', $row)) {
+                if (!in_array($row['default_visible'], [0, 1, '0', '1'], true)) {
+                    throw new RuntimeException('表示チェックの値が不正です。');
+                }
+                $visible = (int)$row['default_visible'];
+            }
             $desired[] = ['id' => $id, 'creator_id' => $creatorId, 'role' => $role,
                 'role_id' => $roleId, 'display_order' => $order,
-                'default_visible' => $roleChanged ? self::defaultVisible($role) : (int)$old['default_visible'],
+                'default_visible' => $visible,
                 'old' => $old];
         }
         if (count($seen) !== count($byId)) {
-            throw new RuntimeException('人物行が不足しています。再読み込みしてください。削除はチェックで指定してください。');
+            throw new RuntimeException('人物行が不足しています。再読み込みしてください。削除は削除ボタンで指定してください。');
         }
         // Compare final rows with the same collation as the existing UNIQUE index.
         $equal = $this->pdo->prepare('SELECT CONVERT(? USING utf8mb4) COLLATE utf8mb4_general_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_general_ci');
@@ -145,7 +154,8 @@ class WorkCreatorEditor
             $values = [$row['creator_id'], $row['role_id'], $row['role'], $row['display_order'], $row['default_visible']];
             if (!$old) { $insert->execute(array_merge($values, [$workId])); continue; }
             if ((int)$old['creator_id'] !== $row['creator_id'] || $old['role'] !== $row['role'] ||
-                (int)$old['display_order'] !== $row['display_order']) {
+                (int)$old['display_order'] !== $row['display_order'] ||
+                (int)$old['default_visible'] !== $row['default_visible']) {
                 $update->execute(array_merge($values, [$row['id'], $workId]));
             }
         }

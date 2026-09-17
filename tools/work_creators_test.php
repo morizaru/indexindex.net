@@ -78,9 +78,9 @@ try {
     saveRows($rows);
     $rows = $editor->rows($workId);
     check((int)$rows[0]['id'] === $id && (int)$rows[0]['creator_id'] === 2 && (int)$rows[0]['default_visible'] === 0, 'Person change preserves ID and visibility');
-    $rows[0]['role'] = '原作'; saveRows($rows); $rows = $editor->rows($workId);
+    $rows[0]['role'] = '原作'; unset($rows[0]['default_visible']); saveRows($rows); $rows = $editor->rows($workId);
     check((int)$rows[0]['default_visible'] === 1 && (int)$rows[0]['role_id'] === 2, 'Changed role recomputes visibility and role_id');
-    $rows[0]['role'] = '未登録役割'; saveRows($rows); $rows = $editor->rows($workId);
+    $rows[0]['role'] = '未登録役割'; unset($rows[0]['default_visible']); saveRows($rows); $rows = $editor->rows($workId);
     check((int)$rows[0]['default_visible'] === 0 && $rows[0]['role_id'] === null, 'Unknown role remains text with NULL role_id');
     $rows[0]['role'] = ''; $rows[0]['display_order'] = -1; saveRows($rows);
     $before = $editor->rows($workId); saveRows($before);
@@ -138,6 +138,31 @@ try {
     }
     check(WorkCreatorEditor::defaultVisible('監修') === 0, 'All specified visible roles and other-role default');
 
+    $rows = $editor->rows($workId);
+    $changedId = $rows[0]['id'];
+    $rows[0]['default_visible'] = 1 - (int)$rows[0]['default_visible'];
+    $manualVisible = $rows[0]['default_visible']; saveRows($rows);
+    $rows = $editor->rows($workId);
+    check($rows[0]['id'] === $changedId && (int)$rows[0]['default_visible'] === $manualVisible, 'Visibility-only change updates existing ID');
+    $rows[0]['role'] = '作画'; $rows[0]['default_visible'] = '0'; saveRows($rows);
+    $rows = $editor->rows($workId);
+    check((int)$rows[0]['default_visible'] === 0, 'Manual OFF overrides visible role after role change');
+    $rows[0]['role'] = '監修'; $rows[0]['default_visible'] = '1'; saveRows($rows);
+    $rows = $editor->rows($workId);
+    check((int)$rows[0]['default_visible'] === 1, 'Manual ON overrides hidden role after role change');
+    $rows[0]['default_visible'] = '0'; saveRows($rows); $rows = $editor->rows($workId);
+    $before = $rows; saveRows($rows);
+    check($editor->rows($workId) === $before, 'Explicit unchanged OFF does not update any column');
+    $bad = $rows; $bad[0]['default_visible'] = '2';
+    check(rejected(function () use ($bad) { saveRows($bad); }, '表示チェック'), 'Invalid visibility rejected');
+    $new = ['id' => 0, 'creator_id' => 7, 'creator_name' => '100%作者', 'role' => 'author', 'display_order' => 100, 'default_visible' => '0'];
+    $rows[] = $new; saveRows($rows); $rows = $editor->rows($workId);
+    check((int)$rows[count($rows)-1]['default_visible'] === 0, 'New author row honors explicit OFF');
+    // Deleted UI rows submit only hidden fields; existing ID must still be accounted for.
+    $last = count($rows)-1; $deletedId = $rows[$last]['id'];
+    $rows[$last] = ['id' => $deletedId, 'delete' => '1']; saveRows($rows);
+    check(!in_array($deletedId, array_column($editor->rows($workId), 'id'), true), 'Hidden deletion flag works without disabled inputs');
+
     $creator_rows = $editor->rows($workId);
     $creators_fingerprint = WorkCreatorEditor::fingerprint($creator_rows);
     function h($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
@@ -148,6 +173,10 @@ try {
     @$document->loadHTML('<?xml encoding="UTF-8">' . $html);
     $xpath = new DOMXPath($document);
     foreach ($creator_rows as $i => $row) {
+        $checkbox = $xpath->query('//input[@type="checkbox" and @name="work_creators[' . $i . '][default_visible]"]');
+        if ($checkbox->length !== 1 || $checkbox[0]->hasAttribute('checked') !== ((int)$row['default_visible'] === 1)) {
+            throw new RuntimeException('Rendered visibility mismatch');
+        }
         foreach (['id','creator_id','creator_name','role','display_order'] as $field) {
             $nodes = $xpath->query('//input[@name="work_creators[' . $i . '][' . $field . ']"]');
             if ($nodes->length !== 1 || $nodes[0]->getAttribute('value') !== (string)$row[$field]) {
