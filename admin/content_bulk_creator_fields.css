@@ -1,0 +1,7 @@
+.bulk-creator-details { margin-top: 6px; }
+.bulk-creator-details summary { cursor: pointer; color: #0066cc; font-size: 13px; }
+.bulk-creator-list { display: grid; gap: 8px; margin-top: 6px; }
+.bulk-person-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; }
+.bulk-person-row input { min-width: 0; width: 100%; box-sizing: border-box; }
+.bulk-person-row button, .bulk-creator-add { padding: 5px 8px; font-size: 13px; }
+.bulk-creator-status { color: #b00020; font-size: 13px; }

@@ -90,7 +90,7 @@ function normalize_creator_rows($posted_rows) {
         $role_id = ($role_id_raw !== '' && preg_match('/^[0-9]+$/', $role_id_raw)) ? (int)$role_id_raw : null;
         $is_visible = (isset($row['is_visible']) && (string)$row['is_visible'] === '1') ? 1 : 0;
 
-        $rows[] = [
+        $rows[] = array_merge(array_intersect_key($row, array_flip(ContentCreatorWriter::SNAPSHOT_FIELDS)), [
             'id' => (int)($row['id'] ?? 0),
             'role_id' => $role_id,
             'role' => $role,
@@ -98,7 +98,7 @@ function normalize_creator_rows($posted_rows) {
             'display_order' => $display_order,
             'is_visible' => $is_visible,
             'input_index' => $input_index,
-        ];
+        ]);
 
         $auto_order++;
         $input_index++;
@@ -255,6 +255,7 @@ $sql_creators = "
         cc.role_id,
         cc.role,
         cc.display_name,
+        cc.display_title,
         cc.display_affiliation,
         cc.display_order,
         cc.is_visible,
@@ -415,17 +416,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':id' => $content_id
             ]);
 
-            // 行IDを維持し、掲載時の表示名・所属には触れない。
+            // 行IDを維持し、掲載時の表示名・肩書・所属を独立して保存する。
             $stored_by_id = [];
             foreach ($stored_creator_rows as $stored_row) {
                 $stored_by_id[(int)$stored_row['id']] = $stored_row;
             }
             $kept_ids = [];
-            $update_creator = $pdo->prepare('
-                UPDATE content_creators
-                SET creator_id = ?, role_id = ?, role = ?, display_order = ?, is_visible = ?
-                WHERE id = ? AND content_id = ?
-            ');
             $check_duplicate = $pdo->prepare('
                 SELECT id FROM content_creators
                 WHERE content_id = ? AND creator_id = ? AND role = ? AND id <> ? LIMIT 1
@@ -456,16 +452,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             throw new Exception('同じ人物・役割がすでに登録されています。');
                         }
                     }
-                    $update_creator->execute([
+                    $creator_writer->updateIfChanged($content_id, $old,
                         $creator_id, $role_id, $creator_row['role'], $creator_row['display_order'],
-                        $creator_row['is_visible'], $id, $content_id,
-                    ]);
+                        $creator_row['is_visible'], $creator_row
+                    );
                     $kept_ids[$id] = true;
                 } else {
-                    $creator_writer->insertIfMissing(
+                    $inserted = $creator_writer->insertIfMissing(
                         $content_id, $creator_id, $role_id, $creator_row['role'],
-                        $creator_row['display_order'], $creator_row['is_visible']
+                        $creator_row['display_order'], $creator_row['is_visible'], $creator_row
                     );
+                    if (!$inserted) { throw new RuntimeException('同じ人物・役割が重複しています。'); }
                 }
             }
             // 作品変更でも自動置換しない。明示操作時だけ不足分を追加。
@@ -680,6 +677,7 @@ $existing_contents = $stmt->fetchAll();
             }
         }
     </style>
+    <link rel="stylesheet" href="content_creator_fields.css">
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -736,6 +734,13 @@ $existing_contents = $stmt->fetchAll();
 
                 wrap.appendChild(createCreatorInput('creators[' + index + '][role]', row.role || '', '役割'));
                 wrap.appendChild(createCreatorInput('creators[' + index + '][creator_name]', row.creator_name || '', '作者名'));
+                Object.entries({display_name: '表示名', display_title: '肩書', display_affiliation: '所属'}).forEach(([field, label]) => {
+                    const input = createCreatorInput('creators[' + index + '][' + field + ']', row[field] || '', label);
+                    input.className = 'creator-snapshot ' + field;
+                    input.maxLength = 255;
+                    input.setAttribute('aria-label', label);
+                    wrap.appendChild(input);
+                });
                 wrap.appendChild(createCreatorInput('creators[' + index + '][display_order]', row.display_order || String(index + 1), '表示順', 'number'));
 
                 const roleId = createCreatorInput('creators[' + index + '][role_id]', row.role_id || '', '', 'hidden');
@@ -943,6 +948,7 @@ $existing_contents = $stmt->fetchAll();
                             value="<?= h($creator_row['creator_name'] ?? '') ?>"
                             placeholder="作者名"
                         >
+                        <?php require __DIR__ . '/content_creator_snapshot_fields.php'; ?>
                         <input
                             type="number"
                             name="creators[<?= h($index) ?>][display_order]"
@@ -961,6 +967,7 @@ $existing_contents = $stmt->fetchAll();
             <button type="button" class="creator-add" id="addCreatorButton">＋ 作者を追加</button>
             <div class="help">
                 作者名が空欄の行は保存されません。役割の空欄はそのまま保存します。
+                表示名は人物マスターと異なる掲載表記がある場合に入力します。肩書・所属は別々に入力し、所属に外側の括弧は付けません。
             </div>
             <label><input type="checkbox" name="import_work_creators" value="1" <?= isset($_POST['import_work_creators']) ? 'checked' : '' ?>> 保存時に作品の人物を不足分だけ追加する</label>
             <div class="help">作品を変更しても登録済みの人物・表示設定は保持します。追加する人物には作品の表示初期値を使用します。</div>

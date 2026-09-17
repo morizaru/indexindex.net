@@ -89,13 +89,14 @@ function normalize_creator_rows($posted_rows) {
         $role_id_raw = trim((string)($row['role_id'] ?? ''));
         $role_id = ($role_id_raw !== '' && preg_match('/^[0-9]+$/', $role_id_raw)) ? (int)$role_id_raw : null;
 
-        $rows[] = [
+        $rows[] = array_merge(array_intersect_key($row, array_flip(ContentCreatorWriter::SNAPSHOT_FIELDS)), [
             'role_id' => $role_id,
             'role' => $role,
             'creator_name' => $creator_name,
             'display_order' => $display_order,
+            'is_visible' => (string)($row['is_visible'] ?? '1') === '1' ? 1 : 0,
             'input_index' => $input_index,
-        ];
+        ]);
 
         $auto_order++;
         $input_index++;
@@ -363,20 +364,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $content_id = (int)$pdo->lastInsertId();
 
-            // 作品の人物を先にコピーし、手入力は不足分だけ追加する。
+            // この新規目次への手入力を先に保存し、作品の人物は不足分だけコピーする。
             $creator_writer = new ContentCreatorWriter($pdo);
             // INSERT済みの新規目次は、このトランザクションがロックを保持している。
-            $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
 
             foreach ($creator_rows as $creator_row) {
                 $creator_id = resolve_creator_id($pdo, $creator_row['creator_name']);
 
-                $creator_writer->insertIfMissing(
+                $inserted = $creator_writer->insertIfMissing(
                     $content_id, $creator_id,
                     $creator_writer->findRoleId($creator_row['role']),
-                    $creator_row['role'], $creator_row['display_order'], 1
+                    $creator_row['role'], $creator_row['display_order'], $creator_row['is_visible'], $creator_row
                 );
+                if (!$inserted) { throw new RuntimeException('同じ人物・役割が重複しています。'); }
             }
+            $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
 
             // 5. 開始ページ順で掲載順を振り直す
             renumber_issue_contents($pdo, $issue_id);
@@ -471,6 +473,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     </style>
+    <link rel="stylesheet" href="content_creator_fields.css">
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const creatorList = document.getElementById('creatorList');
@@ -497,8 +500,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const wrap = document.createElement('div');
                 wrap.className = 'creator-row';
 
+                const visibleLabel = document.createElement('label');
+                visibleLabel.className = 'creator-visible';
+                visibleLabel.appendChild(createCreatorInput('creators[' + index + '][is_visible]', '0', '', 'hidden'));
+                const visibleCheckbox = createCreatorInput('creators[' + index + '][is_visible]', '1', '', 'checkbox');
+                visibleCheckbox.checked = true;
+                visibleLabel.appendChild(visibleCheckbox);
+                visibleLabel.appendChild(document.createTextNode('表示'));
+                wrap.appendChild(visibleLabel);
+
                 wrap.appendChild(createCreatorInput('creators[' + index + '][role]', row.role || '', '役割'));
                 wrap.appendChild(createCreatorInput('creators[' + index + '][creator_name]', row.creator_name || '', '作者名'));
+                Object.entries({display_name: '表示名', display_title: '肩書', display_affiliation: '所属'}).forEach(([field, label]) => {
+                    const input = createCreatorInput('creators[' + index + '][' + field + ']', row[field] || '', label);
+                    input.className = 'creator-snapshot ' + field;
+                    input.maxLength = 255;
+                    input.setAttribute('aria-label', label);
+                    wrap.appendChild(input);
+                });
                 wrap.appendChild(createCreatorInput('creators[' + index + '][display_order]', row.display_order || String(index + 1), '表示順', 'number'));
 
                 const roleId = createCreatorInput('creators[' + index + '][role_id]', row.role_id || '', '', 'hidden');
@@ -675,6 +694,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="creator-list" id="creatorList">
                 <?php foreach ($creator_rows as $index => $creator_row): ?>
                     <div class="creator-row">
+                        <label class="creator-visible">
+                            <input type="hidden" name="creators[<?= h($index) ?>][is_visible]" value="0">
+                            <input type="checkbox" name="creators[<?= h($index) ?>][is_visible]" value="1" <?= (int)($creator_row['is_visible'] ?? 1) === 1 ? 'checked' : '' ?>> 表示
+                        </label>
                         <input
                             type="text"
                             name="creators[<?= h($index) ?>][role]"
@@ -687,6 +710,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             value="<?= h($creator_row['creator_name'] ?? '') ?>"
                             placeholder="作者名"
                         >
+                        <?php require __DIR__ . '/content_creator_snapshot_fields.php'; ?>
                         <input
                             type="number"
                             name="creators[<?= h($index) ?>][display_order]"
@@ -704,6 +728,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <button type="button" class="creator-add" id="addCreatorButton">＋ 作者を追加</button>
             <div class="help">作者名が空欄の行は保存されません。役割が空欄の場合は author として保存します。</div>
+            <div class="help">表示名は人物マスターと異なる掲載表記がある場合に入力します。肩書・所属は別々に入力し、所属に外側の括弧は付けません。手入力した人物・役割を優先し、作品の標準人物は不足分だけ取り込みます。</div>
         </div>
 
         <div class="form-row">

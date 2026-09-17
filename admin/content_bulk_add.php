@@ -561,10 +561,10 @@ function normalize_structured_creators($creators) {
         }
 
         if ($name !== '') {
-            $items[] = [
+            $items[] = array_merge(array_intersect_key($creator, array_flip(ContentCreatorWriter::SNAPSHOT_FIELDS)), [
                 'name' => $name,
                 'role' => $role,
-            ];
+            ]);
         }
     }
 
@@ -656,6 +656,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'lookup_creators_by_title') {
     send_creator_lookup_json([
         'creators' => lookup_creators_by_title($pdo, $_GET['title'] ?? '', (int)($_GET['work_id'] ?? 0))
     ]);
+}
+
+// Read-only conversion uses the existing bulk name/role parser.
+if (($_GET['action'] ?? '') === 'parse_creator_input') {
+    send_creator_lookup_json(['creators' => build_creator_rows_from_name_bulk((string)($_GET['name'] ?? ''))]);
 }
 
 function make_empty_rows() {
@@ -1013,10 +1018,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $content_id = (int)$pdo->lastInsertId();
             // 新規目次のロックはINSERT時に取得済み。人物ごとのSELECTは不要。
-            $copied_count = $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
-            if ($copied_count === 0 && empty($row['creator_rows'])) {
-                throw new Exception($row['input_order'] . '行目：作品に人物が未登録のため、作者名を入力してください。');
-            }
 
             $display_order = 1;
             $creator_rows = $row['creator_rows'];
@@ -1046,11 +1047,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $creator_id = get_or_create_creator_id($pdo, $creator_name_one);
                 $role_id = get_or_create_role_id_bulk($pdo, $creator_role);
 
-                $creator_writer->insertIfMissing(
-                    $content_id, $creator_id, $role_id, $creator_role, $display_order, 1
+                $inserted = $creator_writer->insertIfMissing(
+                    $content_id, $creator_id, $role_id, $creator_role, $display_order, 1, $creator_row
                 );
+                if (!$inserted) { throw new RuntimeException($row['input_order'] . '行目：同じ人物・役割が重複しています。'); }
 
                 $display_order++;
+            }
+            $copied_count = $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
+            if ($copied_count === 0 && empty($row['creator_rows'])) {
+                throw new Exception($row['input_order'] . '行目：作品に人物が未登録のため、作者名を入力してください。');
             }
 
             $inserted_count++;
@@ -1597,6 +1603,7 @@ if ($issue_id > 0) {
                         event.preventDefault();
                     });
                     button.addEventListener('click', function () {
+                        if (input.readOnly) { return; }
                         input.value = row.value;
                         const workIdInput = input.parentElement.querySelector('input[name$="[work_id]"]');
                         if (workIdInput) {
@@ -1618,6 +1625,7 @@ if ($issue_id > 0) {
             }
 
             function fetchSuggestions(input) {
+                if (input.readOnly) { return; }
                 const q = input.value.trim();
                 const type = input.dataset.suggestType || '';
                 const list = input.parentElement.querySelector('.suggest-list');
@@ -1774,6 +1782,7 @@ if ($issue_id > 0) {
 
                 input.addEventListener('input', function () {
                     const row = input.closest('tr');
+                    if (input.readOnly) { return; }
                     if (row) {
                         hideCreatorAutofillNote(row);
                     }
@@ -1975,7 +1984,7 @@ if ($issue_id > 0) {
             </select>
             <div class="help">
                 入力した行だけ登録します。読切・出張掲載が未チェックの場合は「連載」として登録します。話数は数字だけで保存します。複数人入力は「まんが:〇〇, 原案:△△」のように半角カンマ区切りで入力できます。
-                作品に登録済みの人物は表示設定も含めて保存時に取り込みます。作者名は、その号だけの人物を追加する場合に入力してください。
+                作品に登録済みの人物は表示設定も含めて保存時に取り込みます。手入力した人物・役割を優先し、不足分だけ取り込みます。「人物ごとの詳細」で表示名・肩書・所属を入力できます。
             </div>
         </div>
 
@@ -2054,6 +2063,13 @@ if ($issue_id > 0) {
                                     value="<?= h($creators_json ?: '[]') ?>"
                                 >
                                 <div class="suggest-list"></div>
+                                <details class="bulk-creator-details">
+                                    <summary>人物ごとの詳細</summary>
+                                    <div class="bulk-creator-status" aria-live="polite"></div>
+                                    <div class="bulk-creator-list"></div>
+                                    <button type="button" class="bulk-creator-add">＋ 人物を追加</button>
+                                    <div class="help">表示名・肩書・所属は別々に入力します。所属に外側の括弧は付けません。</div>
+                                </details>
                             </td>
 
                             <td>
@@ -2190,5 +2206,7 @@ if ($issue_id > 0) {
     <?php endif; ?>
 
 </div>
+<link rel="stylesheet" href="content_bulk_creator_fields.css">
+<script src="content_bulk_creator_fields.js"></script>
 </body>
 </html>
