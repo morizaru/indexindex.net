@@ -957,6 +957,10 @@ $to_count = min($offset + $per_page, $total_count);
                 display: block;
             }
 
+            .filter-grid .year-row {
+                white-space: normal;
+            }
+
             .form-row {
                 margin-bottom: 12px;
             }
