@@ -272,6 +272,19 @@ if (!$work) {
     exit('指定された作品が見つかりません。');
 }
 
+// 作品としての標準人物（掲載ごとの content_creators とは別に取得）
+$stmt = $pdo->prepare("
+    SELECT wc.creator_id, wc.role, wc.display_order, c.name AS creator_name
+    FROM work_creators wc
+    JOIN creators c ON c.id = wc.creator_id
+    WHERE wc.work_id = :work_id
+    ORDER BY wc.display_order ASC, wc.id ASC
+");
+$stmt->execute([
+    ':work_id' => $work_id
+]);
+$work_creators = $stmt->fetchAll();
+
 $stmt = $pdo->prepare("
     SELECT COUNT(*) AS total_count
     FROM issue_contents
@@ -637,6 +650,29 @@ function format_episode_no($row, $work) {
             line-height: 1.7;
         }
 
+        .work-title-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 8px 24px;
+            margin-bottom: 20px;
+        }
+
+        .work-title-row h1,
+        .work-title-row .meta {
+            margin-bottom: 0;
+        }
+
+        .work-title-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0 1em;
+        }
+
+        .work-creators {
+            font-weight: bold;
+        }
+
         .nav {
             margin-bottom: 20px;
         }
@@ -942,24 +978,33 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="container">
 
-    <h1><?= h($work['title']) ?></h1>
+    <div class="work-title-row">
+        <h1><?= h($work['title']) ?></h1>
+        <div class="meta work-title-meta">
+            <span>区分：<?= h($work['publication_type'] ?? '') ?></span>
+            <span>
+                話数形式：
+                <?php if (!empty($work['episode_format_name'])): ?>
+                    <?= h($work['episode_format_name']) ?>
+                    <?php if (!empty($work['episode_number_style'])): ?>
+                        / 数字形式：<?= h($work['episode_number_style']) ?>
+                    <?php endif; ?>
+                <?php else: ?>
+                    未設定
+                <?php endif; ?>
+            </span>
+        </div>
+    </div>
+
+    <?php if ($work_creators): ?>
+        <div class="meta work-creators">
+            人物：<?php foreach ($work_creators as $index => $work_creator): ?><?= $index > 0 ? '／' : '' ?><a href="creator.php?creator_id=<?= h((int)$work_creator['creator_id']) ?>"><?= h($work_creator['creator_name']) ?></a><?php if ((string)$work_creator['role'] !== '' && $work_creator['role'] !== 'author'): ?>（<?= h($work_creator['role']) ?>）<?php endif; ?><?php endforeach; ?>
+        </div>
+    <?php endif; ?>
 
     <?php if (!empty($work['title_sub'])): ?>
         <div class="work-sub"><?= h($work['title_sub']) ?></div>
     <?php endif; ?>
-
-    <div class="meta">
-        区分：<?= h($work['publication_type'] ?? '') ?><br>
-        話数形式：
-        <?php if (!empty($work['episode_format_name'])): ?>
-            <?= h($work['episode_format_name']) ?>
-            <?php if (!empty($work['episode_number_style'])): ?>
-                / 数字形式：<?= h($work['episode_number_style']) ?>
-            <?php endif; ?>
-        <?php else: ?>
-            未設定
-        <?php endif; ?>
-    </div>
 
     <div class="count">
         掲載件数：<?= h(count($contents)) ?>件
