@@ -191,6 +191,11 @@ $order_by_map = [
 ];
 $order_by_sql = $order_by_map[$sort];
 
+// 現行UIでは出版社・雑誌の選択肢を使わない。再利用時だけ有効にする。
+$load_publisher_magazine_options = false;
+$publishers = [];
+$magazines = [];
+
 $publisher_where = [];
 $publisher_params = [];
 
@@ -204,20 +209,22 @@ if (!empty($publisher_where)) {
     $publisher_where_sql = 'WHERE ' . implode(' AND ', $publisher_where);
 }
 
-$stmt = $pdo->prepare("
-    SELECT DISTINCT
-        p.id,
-        p.name
-    FROM publishers p
-    JOIN magazines m ON p.id = m.publisher_id
-    JOIN magazine_issues mi ON m.id = mi.magazine_id
-    JOIN issue_contents ic ON mi.id = ic.issue_id
-    JOIN content_creators cc ON ic.id = cc.content_id
-    {$publisher_where_sql}
-    ORDER BY p.name ASC
-");
-$stmt->execute($publisher_params);
-$publishers = $stmt->fetchAll();
+if ($load_publisher_magazine_options) {
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT
+            p.id,
+            p.name
+        FROM publishers p
+        JOIN magazines m ON p.id = m.publisher_id
+        JOIN magazine_issues mi ON m.id = mi.magazine_id
+        JOIN issue_contents ic ON mi.id = ic.issue_id
+        JOIN content_creators cc ON ic.id = cc.content_id
+        {$publisher_where_sql}
+        ORDER BY p.name ASC
+    ");
+    $stmt->execute($publisher_params);
+    $publishers = $stmt->fetchAll();
+}
 
 $magazine_sql = "
     SELECT DISTINCT
@@ -250,9 +257,11 @@ if ($magazine_keyword !== '') {
 }
 
 $magazine_sql .= " ORDER BY p.name ASC, m.name ASC";
-$stmt = $pdo->prepare($magazine_sql);
-$stmt->execute($magazine_params);
-$magazines = $stmt->fetchAll();
+if ($load_publisher_magazine_options) {
+    $stmt = $pdo->prepare($magazine_sql);
+    $stmt->execute($magazine_params);
+    $magazines = $stmt->fetchAll();
+}
 
 $year_sql = "
     SELECT
@@ -478,15 +487,23 @@ if (!empty($where)) {
     $where_sql = 'WHERE ' . implode(' AND ', $where);
 }
 
-// 総人物数
-$count_sql = "
-    SELECT COUNT(DISTINCT c.id) AS total_count
-    FROM creators c
+// 氏名・頭文字はc側、年・役割は既存EXISTSで絞るため、通常のCOUNTに外側JOINは不要。
+$count_search_join_sql = '';
+if ($keyword !== '') {
+    $count_search_join_sql = "
     LEFT JOIN content_creators cc ON c.id = cc.creator_id
     LEFT JOIN issue_contents ic ON cc.content_id = ic.id
     LEFT JOIN works w ON ic.work_id = w.id
     LEFT JOIN magazine_issues mi ON ic.issue_id = mi.id
     LEFT JOIN magazines m ON mi.magazine_id = m.id
+    ";
+}
+
+// 総人物数
+$count_sql = "
+    SELECT COUNT(DISTINCT c.id) AS total_count
+    FROM creators c
+    {$count_search_join_sql}
     {$where_sql}
 ";
 

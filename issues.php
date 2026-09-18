@@ -509,15 +509,23 @@ if (!empty($where)) {
 }
 
 if ($magazine_id <= 0) {
+    // 作品・人物列は横断キーワード検索でのみ参照する。
+    $magazine_search_join_sql = '';
+    if ($keyword !== '') {
+        $magazine_search_join_sql = "
+        LEFT JOIN works w ON ic.work_id = w.id
+        LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
+        LEFT JOIN creators c ON cc.creator_id = c.id
+        ";
+    }
+
     $count_magazines_sql = "
         SELECT COUNT(DISTINCT m.id) AS total_count
         FROM magazines m
         JOIN publishers p ON m.publisher_id = p.id
         JOIN magazine_issues mi ON m.id = mi.magazine_id
         JOIN issue_contents ic ON mi.id = ic.issue_id
-        LEFT JOIN works w ON ic.work_id = w.id
-        LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
-        LEFT JOIN creators c ON cc.creator_id = c.id
+        {$magazine_search_join_sql}
         {$where_sql}
     ";
     $stmt = $pdo->prepare($count_magazines_sql);
@@ -547,9 +555,7 @@ if ($magazine_id <= 0) {
         JOIN publishers p ON m.publisher_id = p.id
         JOIN magazine_issues mi ON m.id = mi.magazine_id
         JOIN issue_contents ic ON mi.id = ic.issue_id
-        LEFT JOIN works w ON ic.work_id = w.id
-        LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
-        LEFT JOIN creators c ON cc.creator_id = c.id
+        {$magazine_search_join_sql}
         {$where_sql}
         GROUP BY m.id, m.name, p.name
         HAVING content_count > 0

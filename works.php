@@ -203,6 +203,11 @@ $order_by_map = [
 ];
 $order_by_sql = $order_by_map[$sort];
 
+// 現行UIでは出版社・雑誌の選択肢を使わない。再利用時だけ有効にする。
+$load_publisher_magazine_options = false;
+$publishers = [];
+$magazines = [];
+
 // 出版社一覧
 $publisher_where = [];
 $publisher_params = [];
@@ -217,19 +222,21 @@ if (!empty($publisher_where)) {
     $publisher_where_sql = 'WHERE ' . implode(' AND ', $publisher_where);
 }
 
-$stmt = $pdo->prepare("
-    SELECT DISTINCT
-        p.id,
-        p.name
-    FROM publishers p
-    JOIN magazines m ON p.id = m.publisher_id
-    JOIN magazine_issues mi ON m.id = mi.magazine_id
-    JOIN issue_contents ic ON mi.id = ic.issue_id
-    {$publisher_where_sql}
-    ORDER BY p.name ASC
-");
-$stmt->execute($publisher_params);
-$publishers = $stmt->fetchAll();
+if ($load_publisher_magazine_options) {
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT
+            p.id,
+            p.name
+        FROM publishers p
+        JOIN magazines m ON p.id = m.publisher_id
+        JOIN magazine_issues mi ON m.id = mi.magazine_id
+        JOIN issue_contents ic ON mi.id = ic.issue_id
+        {$publisher_where_sql}
+        ORDER BY p.name ASC
+    ");
+    $stmt->execute($publisher_params);
+    $publishers = $stmt->fetchAll();
+}
 
 // 雑誌一覧
 $magazine_where = [];
@@ -255,21 +262,23 @@ if (!empty($magazine_where)) {
     $magazine_where_sql = 'WHERE ' . implode(' AND ', $magazine_where);
 }
 
-$stmt = $pdo->prepare("
-    SELECT DISTINCT
-        m.id,
-        m.publisher_id,
-        m.name,
-        p.name AS publisher_name
-    FROM magazines m
-    JOIN publishers p ON m.publisher_id = p.id
-    JOIN magazine_issues mi ON m.id = mi.magazine_id
-    JOIN issue_contents ic ON mi.id = ic.issue_id
-    {$magazine_where_sql}
-    ORDER BY p.name ASC, m.name ASC
-");
-$stmt->execute($magazine_params);
-$magazines = $stmt->fetchAll();
+if ($load_publisher_magazine_options) {
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT
+            m.id,
+            m.publisher_id,
+            m.name,
+            p.name AS publisher_name
+        FROM magazines m
+        JOIN publishers p ON m.publisher_id = p.id
+        JOIN magazine_issues mi ON m.id = mi.magazine_id
+        JOIN issue_contents ic ON mi.id = ic.issue_id
+        {$magazine_where_sql}
+        ORDER BY p.name ASC, m.name ASC
+    ");
+    $stmt->execute($magazine_params);
+    $magazines = $stmt->fetchAll();
+}
 
 // 年一覧
 $year_where = [
