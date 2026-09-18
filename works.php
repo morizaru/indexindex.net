@@ -378,6 +378,15 @@ if (!empty($where)) {
     $where_sql = 'WHERE ' . implode(' AND ', $where);
 }
 
+// 人物JOINは横断キーワード検索でのみ必要。通常一覧の集計行を増やさない。
+$creator_search_join_sql = '';
+if ($keyword !== '') {
+    $creator_search_join_sql = "
+    LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
+    LEFT JOIN creators c ON cc.creator_id = c.id
+    ";
+}
+
 // 総作品数
 $count_sql = "
     SELECT COUNT(DISTINCT w.id) AS total_count
@@ -386,8 +395,7 @@ $count_sql = "
     JOIN magazine_issues mi ON ic.issue_id = mi.id
     JOIN magazines m ON mi.magazine_id = m.id
     JOIN publishers p ON m.publisher_id = p.id
-    LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
-    LEFT JOIN creators c ON cc.creator_id = c.id
+    {$creator_search_join_sql}
     {$where_sql}
 ";
 
@@ -420,8 +428,7 @@ $sql = "
     JOIN magazine_issues mi ON ic.issue_id = mi.id
     JOIN magazines m ON mi.magazine_id = m.id
     JOIN publishers p ON m.publisher_id = p.id
-    LEFT JOIN content_creators cc ON ic.id = cc.content_id AND cc.is_visible = 1
-    LEFT JOIN creators c ON cc.creator_id = c.id
+    {$creator_search_join_sql}
     {$where_sql}
     GROUP BY w.id, w.title, w.title_sub, w.title_kana, w.publication_type
     ORDER BY {$order_by_sql}

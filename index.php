@@ -33,222 +33,8 @@ try {
     $contentCount = null;
 }
 
-function index_fetch_all(PDO $pdo, string $sql, array $params = []) {
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
-
-function index_fetch_access_ranking(PDO $pdo, string $type, int $limit = 5) {
-    if ($type === 'works') {
-        $sql = "
-            SELECT
-                w.id,
-                w.title AS name,
-                COUNT(*) AS pv,
-                COUNT(DISTINCT al.visitor_hash) AS uu
-            FROM access_logs al
-            JOIN works w
-              ON w.id = CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(al.query_string, 'work_id=', -1), '&', 1) AS UNSIGNED)
-            WHERE al.site_key = 'indexindex'
-              AND al.is_bot = 0
-              AND al.path IN ('/indexindex/work.php', '/indexindex/work_graph.php')
-              AND al.query_string REGEXP '(^|&)work_id=[0-9]+'
-            GROUP BY w.id, w.title
-            ORDER BY pv DESC, uu DESC, w.title ASC
-            LIMIT {$limit}
-        ";
-        return index_fetch_all($pdo, $sql);
-    }
-
-    if ($type === 'magazines') {
-        $sql = "
-            SELECT
-                m.id,
-                m.name AS name,
-                COUNT(*) AS pv,
-                COUNT(DISTINCT r.visitor_hash) AS uu
-            FROM (
-                SELECT
-                    CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(al.query_string, 'magazine_id=', -1), '&', 1) AS UNSIGNED) AS magazine_id,
-                    al.visitor_hash
-                FROM access_logs al
-                WHERE al.site_key = 'indexindex'
-                  AND al.is_bot = 0
-                  AND al.path = '/indexindex/issues.php'
-                  AND al.query_string REGEXP '(^|&)magazine_id=[0-9]+'
-
-                UNION ALL
-
-                SELECT
-                    mi.magazine_id,
-                    al.visitor_hash
-                FROM access_logs al
-                JOIN magazine_issues mi
-                  ON mi.id = CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(al.query_string, 'id=', -1), '&', 1) AS UNSIGNED)
-                WHERE al.site_key = 'indexindex'
-                  AND al.is_bot = 0
-                  AND al.path = '/indexindex/issue.php'
-                  AND al.query_string REGEXP '(^|&)id=[0-9]+'
-            ) r
-            JOIN magazines m ON m.id = r.magazine_id
-            GROUP BY m.id, m.name
-            ORDER BY pv DESC, uu DESC, m.name ASC
-            LIMIT {$limit}
-        ";
-        return index_fetch_all($pdo, $sql);
-    }
-
-    $sql = "
-        SELECT
-            c.id,
-            c.name,
-            COUNT(*) AS pv,
-            COUNT(DISTINCT al.visitor_hash) AS uu
-        FROM access_logs al
-        JOIN creators c
-          ON c.id = CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(al.query_string, 'creator_id=', -1), '&', 1) AS UNSIGNED)
-        WHERE al.site_key = 'indexindex'
-          AND al.is_bot = 0
-          AND al.path = '/indexindex/creator.php'
-          AND al.query_string REGEXP '(^|&)creator_id=[0-9]+'
-        GROUP BY c.id, c.name
-        ORDER BY pv DESC, uu DESC, c.name ASC
-        LIMIT {$limit}
-    ";
-    return index_fetch_all($pdo, $sql);
-}
-
-function index_fetch_table_columns(PDO $pdo, string $table) {
-    $allowed_tables = ['magazine_issues', 'creators', 'magazines', 'works'];
-    if (!in_array($table, $allowed_tables, true)) {
-        return [];
-    }
-
-    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}`");
-    $stmt->execute();
-
-    $columns = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        if (!empty($row['Field'])) {
-            $columns[$row['Field']] = true;
-        }
-    }
-
-    return $columns;
-}
-
-function index_has_column(array $columns, string $name) {
-    return isset($columns[$name]);
-}
-
-function index_select_column(array $columns, string $alias, string $column, string $as) {
-    return index_has_column($columns, $column) ? "{$alias}.`{$column}` AS {$as}" : "NULL AS {$as}";
-}
-
-function index_recent_datetime_expr(array $columns, string $alias) {
-    if (index_has_column($columns, 'updated_at') && index_has_column($columns, 'created_at')) {
-        return "COALESCE({$alias}.updated_at, {$alias}.created_at)";
-    }
-
-    if (index_has_column($columns, 'updated_at')) {
-        return "{$alias}.updated_at";
-    }
-
-    if (index_has_column($columns, 'created_at')) {
-        return "{$alias}.created_at";
-    }
-
-    return 'NULL';
-}
-
-function index_recent_order_sql(array $columns, string $alias) {
-    $order = index_recent_datetime_expr($columns, $alias) . ' DESC';
-
-    if (index_has_column($columns, 'id')) {
-        $order .= ", {$alias}.id DESC";
-    }
-
-    return $order;
-}
-
-function index_fetch_recent_issues(PDO $pdo, array $issue_columns, array $magazine_columns, int $limit = 5) {
-    if (!index_has_column($issue_columns, 'id')) {
-        return [];
-    }
-
-    $join_magazines = index_has_column($issue_columns, 'magazine_id') && index_has_column($magazine_columns, 'id');
-    $magazine_name_select = $join_magazines && index_has_column($magazine_columns, 'name')
-        ? 'm.name AS magazine_name'
-        : 'NULL AS magazine_name';
-
-    $sql = "
-        SELECT
-            mi.id,
-            {$magazine_name_select},
-            " . index_select_column($issue_columns, 'mi', 'issue_label', 'issue_label') . "
-        FROM magazine_issues mi
-    ";
-
-    if ($join_magazines) {
-        $sql .= "
-            LEFT JOIN magazines m
-                ON m.id = mi.magazine_id
-        ";
-    }
-
-    $sql .= "
-        ORDER BY " . index_recent_order_sql($issue_columns, 'mi') . "
-        LIMIT {$limit}
-    ";
-
-    return index_fetch_all($pdo, $sql);
-}
-
-function index_fetch_recent_works(PDO $pdo, array $work_columns, int $limit = 5) {
-    if (!index_has_column($work_columns, 'id')) {
-        return [];
-    }
-
-    $sql = "
-        SELECT
-            w.id,
-            " . index_select_column($work_columns, 'w', 'title', 'title') . "
-        FROM works w
-        ORDER BY " . index_recent_order_sql($work_columns, 'w') . "
-        LIMIT {$limit}
-    ";
-
-    return index_fetch_all($pdo, $sql);
-}
-
-function index_fetch_recent_creators(PDO $pdo, array $creator_columns, int $limit = 5) {
-    if (!index_has_column($creator_columns, 'id')) {
-        return [];
-    }
-
-    $sql = "
-        SELECT
-            c.id,
-            " . index_select_column($creator_columns, 'c', 'name', 'name') . "
-        FROM creators c
-        ORDER BY " . index_recent_order_sql($creator_columns, 'c') . "
-        LIMIT {$limit}
-    ";
-
-    return index_fetch_all($pdo, $sql);
-}
-
-$sideAccessRankings = [
-    'works' => [],
-    'magazines' => [],
-    'creators' => [],
-];
-$sideRecentUpdates = [
-    'issues' => [],
-    'works' => [],
-    'creators' => [],
-];
+// 軽量なサイドコンテンツを追加するときだけ有効にする。
+$show_sidebar = false;
 
 $collection_stats = [
     ['label' => '登録雑誌数', 'value' => $magazineCount, 'unit' => '誌'],
@@ -257,34 +43,6 @@ $collection_stats = [
     ['label' => '登録人物数', 'value' => $creatorCount, 'unit' => '人'],
     ['label' => '登録目次件数', 'value' => $contentCount, 'unit' => '件'],
 ];
-
-try {
-    if (isset($pdo) && $pdo instanceof PDO) {
-        $sideAccessRankings['works'] = index_fetch_access_ranking($pdo, 'works', 5);
-        $sideAccessRankings['magazines'] = index_fetch_access_ranking($pdo, 'magazines', 5);
-        $sideAccessRankings['creators'] = index_fetch_access_ranking($pdo, 'creators', 5);
-
-        $issue_columns = index_fetch_table_columns($pdo, 'magazine_issues');
-        $work_columns = index_fetch_table_columns($pdo, 'works');
-        $creator_columns = index_fetch_table_columns($pdo, 'creators');
-        $magazine_columns = index_fetch_table_columns($pdo, 'magazines');
-
-        $sideRecentUpdates['issues'] = index_fetch_recent_issues($pdo, $issue_columns, $magazine_columns, 5);
-        $sideRecentUpdates['works'] = index_fetch_recent_works($pdo, $work_columns, 5);
-        $sideRecentUpdates['creators'] = index_fetch_recent_creators($pdo, $creator_columns, 5);
-    }
-} catch (Throwable $e) {
-    $sideAccessRankings = [
-        'works' => [],
-        'magazines' => [],
-        'creators' => [],
-    ];
-    $sideRecentUpdates = [
-        'issues' => [],
-        'works' => [],
-        'creators' => [],
-    ];
-}
 
 $menu_items = [
     [
@@ -366,23 +124,23 @@ $menu_items = [
             color: #222;
         }
 
-        /*
-            main部分を中央に置くための外枠
-            sidebarはこの外枠の右側に配置
-        */
+        /* サイド領域を使わない間はメインで全幅を使う。 */
         .page-shell {
-            position: relative;
-            max-width: calc(1100px + 18px + 240px);
+            max-width: 1358px;
             margin: 0 auto;
-            padding: 24px 0;
+            padding: 24px;
             box-sizing: border-box;
         }
 
-        /*
-            中央のmain部分
-        */
+        .page-shell.has-sidebar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 240px;
+            column-gap: 18px;
+        }
+
         .container {
-            width: 1100px;
+            width: 100%;
+            min-width: 0;
             box-sizing: border-box;
         }
 
@@ -571,15 +329,9 @@ $menu_items = [
             line-height: 1.7;
         }
 
-        /*
-            sidebarはmain部分の右側に添える
-            mainの中央位置には影響させない
-        */
+        /* 将来の軽量コンテンツ用。現在はHTMLも出力しない。 */
         .sidebar-area {
-            position: absolute;
-            top: 24px;
-            left: calc(1100px + 18px);
-            width: 240px;
+            min-width: 0;
         }
 
         .side-box {
@@ -610,37 +362,6 @@ $menu_items = [
             color: #222;
         }
 
-        .side-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            margin: -14px -14px 0;
-            padding: 12px 14px;
-            border: 0;
-            border-radius: 12px 12px 0 0;
-            background: #222;
-            color: #fff;
-            cursor: pointer;
-            text-align: left;
-        }
-
-        .side-toggle::after {
-            content: "+";
-            flex: 0 0 auto;
-            margin-left: 8px;
-            font-size: 18px;
-            line-height: 1;
-        }
-
-        .side-toggle[aria-expanded="true"]::after {
-            content: "-";
-        }
-
-        .side-toggle-content {
-            padding-top: 10px;
-        }
-
         .side-ranking {
             margin: 0;
             padding-left: 1.4em;
@@ -648,33 +369,6 @@ $menu_items = [
 
         .side-ranking li {
             margin-bottom: 8px;
-        }
-
-        .side-subtitle {
-            margin: 14px 0 6px;
-            padding: 5px 8px;
-            border-left: 4px solid #222;
-            background: #f3f3f3;
-            border-radius: 4px;
-            font-size: 13px;
-            font-weight: 700;
-            color: #222;
-        }
-
-        .side-link {
-            display: block;
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
-            color: #333;
-            text-decoration: none;
-        }
-
-        .side-link:last-child {
-            border-bottom: 0;
-        }
-
-        .side-link:hover {
-            text-decoration: underline;
         }
 
         .side-note {
@@ -685,7 +379,8 @@ $menu_items = [
         }
 
         .footer {
-            width: 1100px;
+            width: 100%;
+            grid-column: 1 / -1;
             margin-top: 28px;
             text-align: center;
             color: #888;
@@ -704,27 +399,13 @@ $menu_items = [
             text-decoration: underline;
         }
 
-        /*
-            sidebar込みで横幅が足りない時は、
-            main → sidebar → footer の順で縦並びにする
-        */
         @media (max-width: 1400px) {
-            .page-shell {
-                padding: 24px;
-            }
-
-            .container {
-                width: 100%;
+            .page-shell.has-sidebar {
+                grid-template-columns: minmax(0, 1fr);
             }
 
             .sidebar-area {
-                position: static;
-                width: 100%;
                 margin-top: 18px;
-            }
-
-            .footer {
-                width: 100%;
             }
         }
 
@@ -799,7 +480,7 @@ $menu_items = [
 </head>
 <body>
 
-<div class="page-shell">
+<div class="page-shell<?= $show_sidebar ? ' has-sidebar' : '' ?>">
 
     <main class="container">
 
@@ -879,82 +560,11 @@ $menu_items = [
 
     </main>
 
-    <div class="sidebar-area">
-        <aside class="side-box" aria-label="アクセスランキング">
-            <section class="side-section">
-                <button type="button" class="side-box-title side-toggle" aria-expanded="false">アクセスランキング</button>
-                <div class="side-toggle-content" hidden>
-
-                <div class="side-subtitle">作品</div>
-                <?php if (empty($sideAccessRankings['works'])): ?>
-                    <div class="side-note">まだありません</div>
-                <?php else: ?>
-                    <?php foreach ($sideAccessRankings['works'] as $row): ?>
-                        <a class="side-link" href="work.php?work_id=<?= h($row['id'] ?? '') ?>"><?= h($row['name'] ?? '') ?></a>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-
-                <div class="side-subtitle">雑誌</div>
-                <?php if (empty($sideAccessRankings['magazines'])): ?>
-                    <div class="side-note">まだありません</div>
-                <?php else: ?>
-                    <?php foreach ($sideAccessRankings['magazines'] as $row): ?>
-                        <a class="side-link" href="issues.php?magazine_id=<?= h($row['id'] ?? '') ?>"><?= h($row['name'] ?? '') ?></a>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-
-                <div class="side-subtitle">人物</div>
-                <?php if (empty($sideAccessRankings['creators'])): ?>
-                    <div class="side-note">まだありません</div>
-                <?php else: ?>
-                    <?php foreach ($sideAccessRankings['creators'] as $row): ?>
-                        <a class="side-link" href="creator.php?creator_id=<?= h($row['id'] ?? '') ?>"><?= h($row['name'] ?? '') ?></a>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-                </div>
-            </section>
-        </aside>
-
-        <aside class="side-box" aria-label="最近の更新">
-            <section class="side-section">
-                <button type="button" class="side-box-title side-toggle" aria-expanded="false">最近の更新</button>
-                <div class="side-toggle-content" hidden>
-
-                <div class="side-subtitle">雑誌号</div>
-                <?php if (empty($sideRecentUpdates['issues'])): ?>
-                    <div class="side-note">まだありません</div>
-                <?php else: ?>
-                    <?php foreach ($sideRecentUpdates['issues'] as $row): ?>
-                        <?php
-                            $issue_name = trim((string)($row['magazine_name'] ?? '') . ' ' . (string)($row['issue_label'] ?? ''));
-                        ?>
-                        <a class="side-link" href="issue.php?id=<?= h($row['id'] ?? '') ?>"><?= h($issue_name) ?></a>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-
-                <div class="side-subtitle">作品</div>
-                <?php if (empty($sideRecentUpdates['works'])): ?>
-                    <div class="side-note">まだありません</div>
-                <?php else: ?>
-                    <?php foreach ($sideRecentUpdates['works'] as $row): ?>
-                        <a class="side-link" href="work.php?work_id=<?= h($row['id'] ?? '') ?>"><?= h($row['title'] ?? '') ?></a>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-
-                <div class="side-subtitle">人物</div>
-                <?php if (empty($sideRecentUpdates['creators'])): ?>
-                    <div class="side-note">まだありません</div>
-                <?php else: ?>
-                    <?php foreach ($sideRecentUpdates['creators'] as $row): ?>
-                        <a class="side-link" href="creator.php?creator_id=<?= h($row['id'] ?? '') ?>"><?= h($row['name'] ?? '') ?></a>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-                </div>
-            </section>
-        </aside>
-
-        <?php include __DIR__ . '/includes/sidebar.php'; ?>
-    </div>
+    <?php if ($show_sidebar): ?>
+        <div class="sidebar-area">
+            <?php include __DIR__ . '/includes/sidebar.php'; ?>
+        </div>
+    <?php endif; ?>
 
     <div class="footer">
         <a href="index.php">トップページ</a> |
@@ -970,20 +580,7 @@ $menu_items = [
 
 </div>
 
-<script>
-document.querySelectorAll('.side-toggle').forEach(function (button) {
-    button.addEventListener('click', function () {
-        const content = button.nextElementSibling;
-        const isOpen = button.getAttribute('aria-expanded') === 'true';
 
-        button.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
-
-        if (content) {
-            content.hidden = isOpen;
-        }
-    });
-});
-</script>
 
 </body>
 </html>

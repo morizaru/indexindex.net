@@ -264,20 +264,10 @@ if ($keyword !== '') {
     ];
 }
 
-$stmt = $pdo->prepare("
-    SELECT COUNT(DISTINCT ic.id) AS total_count
-    FROM content_creators cc
-    JOIN issue_contents ic ON cc.content_id = ic.id
-    WHERE cc.creator_id = :creator_id
-");
-$stmt->execute([
-    ':creator_id' => $creator_id
-]);
-$creator_total_content_count = (int)($stmt->fetch()['total_count'] ?? 0);
-$should_noindex = ($creator_total_content_count === 0);
-
+// 同じ人物・掲載範囲の件数と概要を1回の集計で取得する。
 $stmt = $pdo->prepare("
     SELECT
+        COUNT(DISTINCT ic.id) AS total_count,
         COUNT(DISTINCT ic.work_id) AS work_count,
         COUNT(DISTINCT ic.issue_id) AS issue_count,
         GROUP_CONCAT(
@@ -299,6 +289,8 @@ $stmt->execute([
     ':creator_id' => $creator_id
 ]);
 $creator_summary = $stmt->fetch() ?: [];
+$creator_total_content_count = (int)($creator_summary['total_count'] ?? 0);
+$should_noindex = ($creator_total_content_count === 0);
 $creator_work_count = (int)($creator_summary['work_count'] ?? 0);
 $creator_issue_count = (int)($creator_summary['issue_count'] ?? 0);
 $creator_roles = trim((string)($creator_summary['roles'] ?? ''));
