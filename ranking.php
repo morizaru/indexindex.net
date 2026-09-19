@@ -5,6 +5,7 @@
 header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/app/config.php';
+require_once __DIR__ . '/app/ranking_cache.php';
 
 if (!isset($pdo) || !($pdo instanceof PDO)) {
     exit('DB接続エラー: app/config.php で $pdo が作成されていません。');
@@ -23,7 +24,9 @@ function h($value) {
 
 function fetch_all(PDO $pdo, string $sql, array $params = []): array {
     $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    if (!$stmt || !$stmt->execute($params)) {
+        throw new PDOException('Ranking query failed');
+    }
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -144,10 +147,11 @@ function fetch_ranking(PDO $pdo, string $type, ?string $from, ?string $to, int $
     return fetch_all($pdo, build_creator_ranking_sql($limit, $condition), $params);
 }
 
-function fetch_ranking_safe(PDO $pdo, string $type, ?string $from, ?string $to, int $limit): array {
+function fetch_ranking_safe(PDO $pdo, string $type, ?string $from, ?string $to, int $limit, bool &$allSucceeded): array {
     try {
         return fetch_ranking($pdo, $type, $from, $to, $limit);
     } catch (PDOException $e) {
+        $allSucceeded = false;
         error_log('ranking.php ranking query failed: ' . $e->getMessage());
         return [];
     }
@@ -218,12 +222,14 @@ function ranking_sub_text(string $type, array $row): string {
     return '人物ID：' . (int)($row['id'] ?? 0);
 }
 
-$today = date('Y-m-d');
-$monthStart = date('Y-m-01');
-$yesterday = date('Y-m-d', strtotime('-1 day'));
-$previousMonthBase = strtotime('first day of previous month');
-$previousMonthStart = date('Y-m-01', $previousMonthBase);
-$previousMonthEnd = date('Y-m-t', $previousMonthBase);
+// One Tokyo timestamp for both query periods and the cache key, including midnight.
+$rankingDate = new DateTimeImmutable('now', new DateTimeZone('Asia/Tokyo'));
+$today = $rankingDate->format('Y-m-d');
+$monthStart = $rankingDate->format('Y-m-01');
+$yesterday = $rankingDate->modify('-1 day')->format('Y-m-d');
+$previousMonthBase = $rankingDate->modify('first day of previous month');
+$previousMonthStart = $previousMonthBase->format('Y-m-01');
+$previousMonthEnd = $previousMonthBase->format('Y-m-t');
 
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
 if (!in_array($limit, [10, 20, 50], true)) {
@@ -266,16 +272,26 @@ $categories = [
     ],
 ];
 
-$rankings = [];
-$comparisonRankings = [];
+$cacheKey = ranking_cache_key(__DIR__, $rankingDate, $limit);
+$rankingData = ranking_cache_remember(dirname(__DIR__) . '/indexindex_cache', $cacheKey, $limit,
+    function () use ($pdo, $categories, $periods, $previousMonthStart, $previousMonthEnd, $yesterday, $limit) {
+        $rankings = [];
+        $comparisonRankings = [];
+        $allSucceeded = true;
+        foreach ($categories as $type => $category) {
+            foreach ($periods as $periodKey => $period) {
+                $rankings[$type][$periodKey] = fetch_ranking_safe($pdo, $type, $period['from'], $period['to'], $limit, $allSucceeded);
+            }
+            $comparisonRankings[$type]['month'] = fetch_ranking_safe($pdo, $type, $previousMonthStart, $previousMonthEnd, $limit, $allSucceeded);
+            $comparisonRankings[$type]['today'] = fetch_ranking_safe($pdo, $type, $yesterday, $yesterday, $limit, $allSucceeded);
+        }
+        return ['data' => ['rankings' => $rankings, 'comparisonRankings' => $comparisonRankings], 'cacheable' => $allSucceeded];
+    }
+);
+$rankings = $rankingData['rankings'];
+$comparisonRankings = $rankingData['comparisonRankings'];
 $rankMaps = [];
 foreach ($categories as $type => $category) {
-    foreach ($periods as $periodKey => $period) {
-        $rankings[$type][$periodKey] = fetch_ranking_safe($pdo, $type, $period['from'], $period['to'], $limit);
-    }
-
-    $comparisonRankings[$type]['month'] = fetch_ranking_safe($pdo, $type, $previousMonthStart, $previousMonthEnd, $limit);
-    $comparisonRankings[$type]['today'] = fetch_ranking_safe($pdo, $type, $yesterday, $yesterday, $limit);
     $rankMaps[$type]['month'] = build_rank_map($comparisonRankings[$type]['month']);
     $rankMaps[$type]['today'] = build_rank_map($comparisonRankings[$type]['today']);
 }
