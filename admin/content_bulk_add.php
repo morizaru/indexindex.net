@@ -8,6 +8,7 @@ header('Content-Type: text/html; charset=UTF-8');
 
 require_once __DIR__ . '/../app/config.php';
 require_once __DIR__ . '/../app/content_creators.php';
+require_once __DIR__ . '/../app/work_creators.php';
 
 if (empty($_SESSION['content_bulk_csrf_token'])) {
     $_SESSION['content_bulk_csrf_token'] = bin2hex(random_bytes(32));
@@ -113,7 +114,8 @@ function renumber_issue_contents($pdo, $issue_id) {
     }
 }
 
-function get_or_create_work_id($pdo, $title, $publication_type, $selected_work_id = 0) {
+function get_or_create_work_id($pdo, $title, $publication_type, $selected_work_id = 0, &$created = false) {
+    $created = false;
     if ($selected_work_id > 0) {
         $stmt = $pdo->prepare("
             SELECT id, publication_type
@@ -192,6 +194,7 @@ function get_or_create_work_id($pdo, $title, $publication_type, $selected_work_i
         ':publication_type' => $publication_type
     ]);
 
+    $created = true;
     return (int)$pdo->lastInsertId();
 }
 
@@ -970,7 +973,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $creator_writer = new ContentCreatorWriter($pdo);
 
         foreach ($valid_rows as $row) {
-            $work_id = get_or_create_work_id($pdo, $row['title_main'], $row['publication_type'], $row['work_id']);
+            $work_id = get_or_create_work_id($pdo, $row['title_main'], $row['publication_type'], $row['work_id'], $work_created);
+            $standard_creators = [];
+            $work_creator_editor = $work_created ? new WorkCreatorEditor($pdo) : null;
 
             $stmt = $pdo->prepare("
                 INSERT INTO issue_contents (
@@ -1046,6 +1051,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $creator_id = get_or_create_creator_id($pdo, $creator_name_one);
+                if ($work_created) {
+                    $standard_creators[] = [
+                        'creator_id' => $creator_id, 'creator_name' => $creator_name_one,
+                        'role' => $creator_role, 'display_order' => $display_order,
+                    ];
+                }
                 $role_id = get_or_create_role_id_bulk($pdo, $creator_role);
 
                 $inserted = $creator_writer->insertIfMissing(
@@ -1055,7 +1066,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $display_order++;
             }
-            $copied_count = $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
+            if ($work_created) {
+                $work_creator_editor->initializeNewWork($work_id, $standard_creators);
+            }
+            // A new work already has the explicitly entered listing credits.
+            $copied_count = $work_created ? 0 : $creator_writer->syncWorkCreatorsToContentCreators($work_id, $content_id);
             if ($copied_count === 0 && empty($row['creator_rows'])) {
                 throw new Exception($row['input_order'] . '行目：作品に人物が未登録のため、作者名を入力してください。');
             }

@@ -69,6 +69,31 @@ class WorkCreatorEditor
         throw new RuntimeException('未登録の人物です。「人物を新規登録」で登録してから選択してください。');
     }
 
+    // Used only for explicitly entered credits while creating a new work.
+    public function initializeNewWork($workId, array $rows)
+    {
+        $actualRoles = [];
+        foreach ($rows as $row) {
+            if ($row['role'] !== 'author' && $row['role'] !== '') {
+                $actualRoles[(int)$row['creator_id']] = true;
+            }
+        }
+        $posted = [];
+        $name = $this->pdo->prepare('SELECT name FROM creators WHERE id = ?');
+        foreach ($rows as $row) {
+            if ($row['role'] === 'author' && isset($actualRoles[(int)$row['creator_id']])) { continue; }
+            // Keep the exact ID resolved/created by bulk registration, even when
+            // the entered spelling differs under the DB's name collation.
+            $name->execute([$row['creator_id']]);
+            $canonicalName = $name->fetchColumn();
+            if ($canonicalName === false) { throw new RuntimeException('人物が見つかりません。'); }
+            $row['creator_name'] = $canonicalName;
+            $posted[] = $row;
+        }
+        // An empty revision prevents accidental overwrite of existing work credits.
+        $this->save($workId, $posted, self::fingerprint([]));
+    }
+
     public function save($workId, array $posted, $fingerprint)
     {
         if (!$this->pdo->inTransaction()) { throw new LogicException('トランザクションが必要です。'); }
