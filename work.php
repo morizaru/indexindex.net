@@ -1069,6 +1069,7 @@ require_once __DIR__ . '/includes/header.php';
             <input type="text" id="textFilter" placeholder="雑誌名・号数・話タイトル・人物・備考で絞り込み">
         </div>
 
+        <?php if (($work['publication_type'] ?? '') === '連載'): ?>
         <div class="graph-links">
             連載順グラフ：
             <?php foreach ($years as $year): ?>
@@ -1088,6 +1089,8 @@ require_once __DIR__ . '/includes/header.php';
                 <?php endif; ?>
             <?php endforeach; ?>
         </div>
+
+        <?php endif; ?>
 
         <table id="contentsTable">
             <thead>

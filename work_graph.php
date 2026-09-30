@@ -30,7 +30,8 @@ function ii_get_positive_int_param(string $key): int {
         return 0;
     }
 
-    return (int)$value;
+    // Reject overflow instead of silently selecting PHP_INT_MAX.
+    return filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 0;
 }
 
 function ii_get_page_param(): array {
@@ -47,7 +48,10 @@ function ii_get_page_param(): array {
         return [1, true, true];
     }
 
-    $page = (int)$value;
+    $page = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($page === false) {
+        return [1, true, true];
+    }
     return [$page, true, $page === 1];
 }
 
@@ -640,7 +644,7 @@ if ($suppress_work_list) {
     if ($total_count <= 0) {
         $canonical_page = 1;
     } elseif ($canonical_page > $total_pages) {
-        $canonical_page = $total_pages;
+        $canonical_page = 1;
     }
 
     $canonical_relative_url = build_work_graph_url($canonical_page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
@@ -686,7 +690,7 @@ if ($suppress_work_list) {
     }
 }
 
-$is_zero_result = ($total_count === 0) || $suppress_work_list;
+$is_zero_result = $has_graph ? empty($rows) : ($total_count === 0);
 $canonical_url = build_absolute_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
 ?>
 <!DOCTYPE html>
@@ -1662,7 +1666,12 @@ require_once __DIR__ . '/includes/header.php';
                     </td>
 
                     <td class="actions">
-                        <a class="button-link graph" href="<?= h(make_graph_url($publisher_id, $magazine_id, $year, (int)$row['id'], $work_q, $creator_q, $page, $sort, $order, $year_from, $year_to)) ?>">
+                        <?php
+                            // Another work must not inherit the selected work's year range.
+                            $link_year_from = (int)$row['id'] === $work_id ? $year_from : (int)$row['first_year'];
+                            $link_year_to = (int)$row['id'] === $work_id ? $year_to : (int)$row['last_year'];
+                        ?>
+                        <a class="button-link graph" href="<?= h(make_graph_url($publisher_id, $magazine_id, $year, (int)$row['id'], $work_q, $creator_q, $page, $sort, $order, $link_year_from, $link_year_to)) ?>">
                             グラフ
                         </a>
                     </td>
