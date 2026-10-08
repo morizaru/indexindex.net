@@ -610,6 +610,7 @@ function format_episode_no($row, $work) {
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <link rel="canonical" href="https://indexindex.net/work.php?work_id=<?= h($work_id) ?>">
     <meta charset="UTF-8">
     <?php if (!empty($should_noindex)): ?>
         <meta name="robots" content="noindex,follow">

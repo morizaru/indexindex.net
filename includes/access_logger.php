@@ -19,10 +19,19 @@
 // ・botアクセス数だけ access_bot_daily に日別・ページ別・bot別で集計保存
 // ・/indexindex/ 配下に加えて、morizaru.net/index.php も記録対象
 
+// Keep the existing logical analytics path so rankings, bot checks and history agree.
+// full_url below always retains the actual request URL.
+function ii_access_logical_path(string $path, string $host): string {
+    if (preg_match('/^(?:www\.)?indexindex\.net(?::[0-9]+)?$/i', $host)) {
+        return '/indexindex' . ($path === '' ? '/' : $path);
+    }
+    return $path;
+}
 if (!function_exists('ii_access_log')) {
     function ii_access_log($pageTitle = null) {
         $requestUri = $_SERVER['REQUEST_URI'] ?? '';
         $pathOnly = parse_url($requestUri, PHP_URL_PATH) ?: '';
+        $pathOnly = ii_access_logical_path($pathOnly, $_SERVER['HTTP_HOST'] ?? '');
 
         // 解析対象
         // 1. /indexindex/ 配下

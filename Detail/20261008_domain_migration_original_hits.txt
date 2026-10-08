@@ -1,0 +1,63 @@
+indexindex\about.php:16:$canonical_url = 'https://morizaru.net/indexindex/about.php';
+index.php:2:// morizaru.net/index.php
+index.php:7:ii_access_log('morizaru.net トップページ');
+index.php:415:        morizaru.net
+indexindex\admin\.htaccess.txt:3:AuthUserFile /home/r1225606/public_html/morizaru.net/indexindex/admin/.htpasswd
+indexindex\admin\access_analytics.php:270:            WHEN referrer_host LIKE '%morizaru.net%' THEN 'internal'
+indexindex\data_policy.php:16:$canonical_url = 'https://morizaru.net/indexindex/data_policy.php';
+indexindex\Detail\20260721_adsense_content_improvement.txt:5:morizaru.net/indexindex/ が単なる自動生成データベースではなく、運営者が漫画雑誌の目次情報を整理している資料サイトであることを、Googleとユーザーに伝わりやすくするための公開ページ改善を行った。
+indexindex\Detail\20260721_adsense_content_improvement.txt:73:4. morizaru.net/index.php
+indexindex\Detail\20260721_adsense_content_improvement.txt:104:- https://morizaru.net/indexindex/about.php
+indexindex\Detail\20260721_adsense_content_improvement.txt:105:- https://morizaru.net/indexindex/how_to_use.php
+indexindex\Detail\20260721_adsense_content_improvement.txt:106:- https://morizaru.net/indexindex/data_policy.php
+indexindex\Detail\20260721_adsense_content_improvement.txt:107:- https://morizaru.net/indexindex/terms.php
+indexindex\Detail\20260721_adsense_content_improvement.txt:108:- https://morizaru.net/indexindex/index.php
+indexindex\Detail\20260721_adsense_content_improvement.txt:109:- https://morizaru.net/index.php
+indexindex\contact.php:19:$site_url   = 'https://morizaru.net/indexindex/';
+indexindex\creator.php:11:    header('Location: https://morizaru.net/indexindex/creator.php?creator_id=' . (int)$_GET['creators_id'], true, 301);
+indexindex\creator.php:487:    <link rel="canonical" href="https://morizaru.net/indexindex/creator.php?creator_id=<?= h($creator_id) ?>">
+indexindex\admin\Detail\FIX_CHECKBOX_STATE_POST_2026-08-31.md:221:| パス | `c:\moriya\00_main\70_study\30_program\HTML\morizaru.net\indexindex\indexindex\admin\` |
+indexindex\Detail\20260807_issue_status_verified_list_visibility.md:6:- 確認対象URL: `https://morizaru.net/indexindex/issues.php?magazine_id=3`
+indexindex\Detail\20260807_issue_status_verified_list_visibility.md:7:- 編集画面例: `https://morizaru.net/indexindex/admin/issue_edit.php?issue_id=17819&saved=1`
+indexindex\admin\Detail\IMPLEMENTATION_CHECKBOX_ALWAYS_VISIBLE.md:376:- **パス:** `c:\moriya\00_main\70_study\30_program\HTML\morizaru.net\indexindex\indexindex\admin\`
+indexindex\Detail\20260807_work_edit_issue_label_numeric_order.md:7:- 確認対象URL: `https://morizaru.net/indexindex/admin/work_edit.php?id=1838`
+indexindex\Detail\20260807_work_edit_issue_year_priority_order.md:7:- 確認対象URL: `https://morizaru.net/indexindex/admin/work_edit.php?id=30950`
+indexindex\Detail\20260807_work_edit_combined_issue_order.md:7:- 確認対象URL: `https://morizaru.net/indexindex/admin/work_edit.php?id=30950`
+indexindex\admin\Detail\MODIFICATION_CHECKBOX_ALWAYS_VISIBLE_2026-08-31.md:136:| パス | `c:\moriya\00_main\70_study\30_program\HTML\morizaru.net\indexindex\indexindex\admin\` |
+indexindex\admin\Detail\IMPLEMENTATION_HIDDEN_FIELD.md:434:| content_bulk_add.php | `c:\moriya\00_main\70_study\30_program\HTML\morizaru.net\indexindex\indexindex\admin\` |
+indexindex\admin\Detail\QUICK_GUIDE_DEBUG_LOGS.md:147:- **ファイル:** `c:/moriya/00_main/70_study/30_program/HTML/morizaru.net/indexindex/indexindex/admin/content_bulk_add.php`
+indexindex\admin\Detail\MODIFICATION_DEBUG_LOGS_TOGGLE_2026-08-31.md:120:- **パス:** `c:\moriya\00_main\70_study\30_program\HTML\morizaru.net\indexindex\indexindex\admin\`
+indexindex\admin\Detail\MODIFICATION_DEBUG_LOGS_TOGGLE_2026-08-31.md:128:1. ブラウザで `https://morizaru.net/indexindex/admin/content_bulk_add.php` にアクセス
+indexindex\work_graph.php:119:    return 'https://morizaru.net/indexindex/' . build_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
+indexindex\privacy.php:14:$site_url  = 'https://morizaru.net/indexindex/';
+indexindex\how_to_use.php:16:$canonical_url = 'https://morizaru.net/indexindex/how_to_use.php';
+indexindex\admin\ndl_collection_extract.php:39:        CURLOPT_USERAGENT => 'INDEXINDEX/0.1 (+https://morizaru.net/indexindex/)',
+indexindex\includes\access_logger.php:12:// morizaru.net/index.php の場合:
+indexindex\includes\access_logger.php:20:// ・/indexindex/ 配下に加えて、morizaru.net/index.php も記録対象
+indexindex\includes\access_logger.php:29:        // 2. morizaru.net/index.php
+indexindex\includes\access_logger.php:30:        // 3. morizaru.net/ でトップページが表示される場合
+indexindex\includes\access_logger.php:109:        $host = $_SERVER['HTTP_HOST'] ?? 'morizaru.net';
+indexindex\admin\ndl_import_year.php:40:        CURLOPT_USERAGENT => 'INDEXINDEX/0.1 (+https://morizaru.net/indexindex/)',
+indexindex\admin\ndl_toc_url_finder.php:36:        CURLOPT_USERAGENT => 'INDEXINDEX/0.1 (+https://morizaru.net/indexindex/)',
+indexindex\sitemap_urls.php:4:const II_SITEMAP_BASE_URL = 'https://morizaru.net/indexindex';
+indexindex\sitemap.php:4:const II_SITEMAP_BASE_URL = 'https://morizaru.net/indexindex';
+indexindex\Detail\20260820_work_graph_gsc_5xx_url_normalization.md:126:<link rel="canonical" href="https://morizaru.net/indexindex/work_graph.php?...">
+indexindex\Detail\20260820_work_graph_gsc_5xx_url_normalization.md:262:curl.exe -I "https://morizaru.net/indexindex/work_graph.php?year_from=1983&year_to=1984&work_id=13276&page=96"
+indexindex\Detail\20260820_work_graph_gsc_5xx_url_normalization.md:263:curl.exe -I "https://morizaru.net/indexindex/work_graph.php?year_from=2003&year_to=2004&work_id=5815&page=121"
+indexindex\Detail\20260820_work_graph_gsc_5xx_url_normalization.md:279:https://www.morizaru.net/indexindex/work_graph.php?order=desc&page=4&work_id=4380&year_from=1960&year_to=1961
+indexindex\work\indexindex_access_analytics_graph_monthly_complete\admin\access_analytics.php:139:            WHEN referrer_host LIKE '%morizaru.net%' THEN 'internal'
+indexindex\work\indexindex_access_analytics\admin\access_analytics.php:90:            WHEN referrer_host LIKE '%morizaru.net%' THEN 'internal'
+indexindex\terms.php:16:$canonical_url = 'https://morizaru.net/indexindex/terms.php';
+indexindex\work\indexindex_access_analytics\includes\access_logger.php:82:        $host = $_SERVER['HTTP_HOST'] ?? 'morizaru.net';
+indexindex\admin\x_post_draft.php:155:    $draft_text .= "https://morizaru.net/indexindex/\n";
+indexindex\Detail\20260919_public_performance_investigation.md:3:調査日：2026-09-19。対象サイト：`https://morizaru.net/indexindex/`。
+indexindex\Detail\20260919_ranking_cache_performance.md:83:個別JSONへのWeb直接アクセスは**未確認**。本番で生成された実ファイル名をサーバーのファイル管理画面等で確認し、`curl -sS -o /dev/null -w "%{http_code}\n" "https://morizaru.net/indexindex_cache/<実際のJSONファイル名>"` で本文を表示せずステータスを確認する。403等でアクセス拒否されることを確認する。404だけではURL間違いと区別できないためファイルの存在も確認する。200の場合は追加アクセス制御が必要として報告し、サーバー設定は別途対応する。内容公開機能・サーバー設定の変更は追加していない。
+indexindex\Detail\20260919_ranking_cache_performance.md:95:ユーザーから `/morizaru.net/indexindex_cache/` を作成済み、ディレクトリURLが403になるとの報告を受けた。以下の初期調査に加え、末尾の「保存先作成後の継続作業」を参照。
+indexindex\Detail\MODIFICATION_REPORT.md:4:URLの `https://morizaru.net/indexindex/admin/content_bulk_add.php` で、作者名を登録する際、スペースで自動分割されていました。
+indexindex\Detail\MODIFICATION_REPORT.md:19:- **ファイルパス:** `c:\moriya\00_main\70_study\30_program\HTML\morizaru.net\indexindex\indexindex\admin\content_bulk_add.php`
+indexindex\Detail\MODIFICATION_REPORT.md:75:1. ブラウザで `https://morizaru.net/indexindex/admin/content_bulk_add.php` にアクセス
+indexindex\Detail\20260930_work_graph_zero_result_normalization.md:43:- canonical生成／出力: 118、694、703。`https://morizaru.net/indexindex/` 固定の既存仕様。
+indexindex\Detail\20260930_work_graph_zero_result_normalization.md:97:- 旧本番の `https://www.morizaru.net/indexindex/work_graph.php?year_from=2009&year_to=2009&work_id=28594&page=9999` はcurl GETで301（www除去）→301（page除去）→200、2回転送。最終URLは同じ条件のpageなし。応答HTMLのnoindex,followと自己canonicalを確認、Warning/Fatal error/Noticeの文字列は検出なし。ただしサーバーログは未確認。
+indexindex\Detail\20260930_work_graph_zero_result_normalization.md:102:ベース `T = https://morizaru.net/indexindex_test/work_graph.php`。
+indexindex\Detail\20260930_work_graph_zero_result_normalization.md:103:canonicalベース `P = https://morizaru.net/indexindex/work_graph.php`。
+indexindex\Detail\20260930_work_graph_zero_result_normalization.md:136:$testBase = 'https://morizaru.net/indexindex_test/work_graph.php'

@@ -529,6 +529,8 @@ $to_count = min($offset + $per_page, $total_count);
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <?php require_once __DIR__ . '/includes/public_url.php'; ?>
+    <link rel="canonical" href="<?= htmlspecialchars(ii_public_canonical('works.php', ['title_q', 'year_keyword', 'year', 'page', 'work_type', 'initial', 'sort', 'dir']), ENT_QUOTES, 'UTF-8') ?>">
     <meta charset="UTF-8">
     <title>作品一覧 - INDEXINDEX</title>
     <style>

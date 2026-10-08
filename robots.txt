@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /app/
+Disallow: /uploads/
+
+Sitemap: https://indexindex.net/sitemap.php

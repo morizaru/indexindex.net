@@ -1,0 +1,16 @@
+#%PHP_START%#
+# Make no changes between _START and _END tag, generated automatically.
+AddHandler application/x-lsphp83 .php
+#%PHP_END%#
+
+RewriteEngine On
+
+# INDEXINDEX migration: before the existing www redirect, only the old subtree.
+RewriteCond %{HTTP_HOST} ^(?:www\.)?morizaru\.net$ [NC]
+RewriteCond %{THE_REQUEST} \s/+indexindex(?:/([^?\s]*))?(?:\?[^\s]*)?\s
+RewriteRule ^indexindex(?:/.*)?$ https://indexindex.net/%1 [R=301,L,NE]
+
+
+# wwwありの場合だけ、wwwなしへ転送
+RewriteCond %{HTTP_HOST} ^www\.morizaru\.net$ [NC]
+RewriteRule ^ https://morizaru.net%{REQUEST_URI} [R=301,L]

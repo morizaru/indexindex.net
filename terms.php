@@ -13,7 +13,7 @@ function h($value) {
 $site_name = 'INDEXINDEX';
 $page_title = '用語説明';
 $page_description = 'INDEXINDEXで使っている漫画雑誌目次関連の用語説明。雑誌号、目次、掲載順、開始ページ、読切、出張掲載、新連載、最終回、作者、原作、作画などを解説します。';
-$canonical_url = 'https://morizaru.net/indexindex/terms.php';
+$canonical_url = 'https://indexindex.net/terms.php';
 $current_page = 'terms';
 $site_header_width = 'narrow';
 ?>

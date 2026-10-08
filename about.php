@@ -13,7 +13,7 @@ function h($value) {
 $site_name = 'INDEXINDEX';
 $page_title = 'INDEXINDEXについて';
 $page_description = 'INDEXINDEXは漫画雑誌の目次、掲載順、開始ページ、作者・関係者情報を整理して公開する資料サイトです。作成目的、収録情報、調査に使える内容を説明します。';
-$canonical_url = 'https://morizaru.net/indexindex/about.php';
+$canonical_url = 'https://indexindex.net/about.php';
 $current_page = 'about';
 $site_header_width = 'narrow';
 ?>

@@ -8,7 +8,7 @@ if (
     ctype_digit($_GET['creators_id']) &&
     (int)$_GET['creators_id'] > 0
 ) {
-    header('Location: https://morizaru.net/indexindex/creator.php?creator_id=' . (int)$_GET['creators_id'], true, 301);
+    header('Location: https://indexindex.net/creator.php?creator_id=' . (int)$_GET['creators_id'], true, 301);
     exit;
 }
 
@@ -484,7 +484,7 @@ $current_sort_label = ($view === 'works' && $sort === 'issue') ? '収録年' : (
     <?php if (!empty($should_noindex)): ?>
         <meta name="robots" content="noindex,follow">
     <?php endif; ?>
-    <link rel="canonical" href="https://morizaru.net/indexindex/creator.php?creator_id=<?= h($creator_id) ?>">
+    <link rel="canonical" href="https://indexindex.net/creator.php?creator_id=<?= h($creator_id) ?>">
     <title><?= h($creator['name']) ?> - 人物詳細 - INDEXINDEX</title>
     <style>
         body {

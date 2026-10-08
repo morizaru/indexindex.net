@@ -548,6 +548,7 @@ $issue_description_date = format_issue_description_date($issue);
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <link rel="canonical" href="https://indexindex.net/issue.php?id=<?= h($issue_id) ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <?php if (!empty($should_noindex)): ?>

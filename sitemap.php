@@ -1,7 +1,7 @@
 <?php
 // sitemap.php
 
-const II_SITEMAP_BASE_URL = 'https://morizaru.net/indexindex';
+const II_SITEMAP_BASE_URL = 'https://indexindex.net';
 const II_SITEMAP_URL_LIMIT = 45000;
 
 function ii_sitemap_xml($value): string {

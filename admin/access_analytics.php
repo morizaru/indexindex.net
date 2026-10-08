@@ -267,7 +267,7 @@ $sourceRows = ii_fetch_all($pdo, "
     SELECT
         CASE
             WHEN referrer_host IS NULL OR referrer_host = '' THEN 'direct'
-            WHEN referrer_host LIKE '%morizaru.net%' THEN 'internal'
+            WHEN referrer_host LIKE '%morizaru.net%' OR referrer_host IN ('indexindex.net', 'www.indexindex.net') THEN 'internal'
             ELSE referrer_host
         END AS source_name,
         COUNT(*) AS cnt

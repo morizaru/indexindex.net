@@ -116,7 +116,7 @@ function build_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_i
 }
 
 function build_absolute_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q = '', $creator_q = '', $sort = 'title', $order = 'asc', $year_from = 0, $year_to = 0) {
-    return 'https://morizaru.net/indexindex/' . build_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
+    return 'https://indexindex.net/' . build_work_graph_url($page, $publisher_id, $magazine_id, $year, $work_id, $work_q, $creator_q, $sort, $order, $year_from, $year_to);
 }
 
 function redirect_work_graph_url($url): void {

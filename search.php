@@ -309,6 +309,8 @@ foreach ($all_result_tabs as $tab_key => $tab_label) {
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <?php require_once __DIR__ . '/includes/public_url.php'; ?>
+    <link rel="canonical" href="<?= htmlspecialchars(ii_public_canonical('search.php', ['q', 'target', 'match_mode']), ENT_QUOTES, 'UTF-8') ?>">
     <meta charset="UTF-8">
     <title>詳細検索 - INDEXINDEX</title>
     <style>

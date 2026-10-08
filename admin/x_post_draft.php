@@ -152,7 +152,7 @@ function build_x_post_draft_text(array $latest, ?array $previous): string {
     $previous_stats = $previous ?: $latest;
 
     $draft_text = "漫画雑誌の収録作品がわかる雑誌目次DB『INDEXINDEX』\n";
-    $draft_text .= "https://morizaru.net/indexindex/\n";
+    $draft_text .= "https://indexindex.net/\n";
     $draft_text .= format_snapshot_datetime($latest['snapshot_at']) . "現在のデータ登録件数\n\n";
     $draft_text .= "・登録雑誌数：" . number_format((int)$latest['magazine_count']) . "誌（" . diff_label($latest['magazine_count'], $previous_stats['magazine_count']) . "）\n";
     $draft_text .= "・登録雑誌号数：" . number_format((int)$latest['issue_count']) . "号（" . diff_label($latest['issue_count'], $previous_stats['issue_count']) . "）\n";

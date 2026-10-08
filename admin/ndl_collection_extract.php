@@ -36,7 +36,7 @@ function fetch_url(string $url, int $timeout = 90): array {
         CURLOPT_TIMEOUT => $timeout,
         CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
         CURLOPT_ENCODING => '',
-        CURLOPT_USERAGENT => 'INDEXINDEX/0.1 (+https://morizaru.net/indexindex/)',
+        CURLOPT_USERAGENT => 'INDEXINDEX/0.1 (+https://indexindex.net/)',
         CURLOPT_HTTPHEADER => [
             'Accept: application/xml,text/xml;q=0.9,*/*;q=0.7',
             'Accept-Language: ja,en-US;q=0.8,en;q=0.6',

@@ -1,0 +1,113 @@
+[
+    {
+        "url":  "https://indexindex.net/",
+        "status":  "200",
+        "canonical":  "",
+        "old_internal_links":  0,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://indexindex.net/issues.php",
+        "status":  "200",
+        "canonical":  "",
+        "old_internal_links":  0,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://indexindex.net/works.php",
+        "status":  "200",
+        "canonical":  "",
+        "old_internal_links":  0,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://indexindex.net/creators.php",
+        "status":  "200",
+        "canonical":  "",
+        "old_internal_links":  0,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://indexindex.net/ranking.php",
+        "status":  "200",
+        "canonical":  "",
+        "old_internal_links":  0,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://indexindex.net/work.php?work_id=35072",
+        "status":  "200",
+        "canonical":  "",
+        "old_internal_links":  0,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://indexindex.net/creator.php?creator_id=123",
+        "status":  "200",
+        "canonical":  "\u003clink rel=\"canonical\" href=\"https://morizaru.net/indexindex/creator.php?creator_id=123\"\u003e",
+        "old_internal_links":  1,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://indexindex.net/robots.txt",
+        "status":  "404",
+        "canonical":  "",
+        "old_internal_links":  0,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://indexindex.net/sitemap.php",
+        "status":  "200",
+        "canonical":  "",
+        "old_internal_links":  0,
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://morizaru.net/indexindex/",
+        "status":  "200",
+        "location":  "",
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://morizaru.net/indexindex/issues.php",
+        "status":  "200",
+        "location":  "",
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://morizaru.net/indexindex/works.php",
+        "status":  "200",
+        "location":  "",
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://morizaru.net/indexindex/work.php?work_id=35072",
+        "status":  "200",
+        "location":  "",
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://morizaru.net/indexindex/creator.php?creator_id=123",
+        "status":  "200",
+        "location":  "",
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://www.morizaru.net/indexindex/",
+        "status":  "301",
+        "location":  "https://morizaru.net/indexindex/",
+        "curl_exit":  0
+    },
+    {
+        "url":  "https://www.indexindex.net/",
+        "status":  "200",
+        "location":  "",
+        "curl_exit":  0
+    },
+    {
+        "url":  "http://indexindex.net/",
+        "status":  "301",
+        "location":  "https://indexindex.net/",
+        "curl_exit":  0
+    }
+]

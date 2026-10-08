@@ -1,0 +1,6 @@
+RewriteEngine On
+
+# The www host is live. Redirect it directly to the canonical HTTPS host.
+RewriteCond %{HTTP_HOST} ^www\.indexindex\.net$ [NC]
+RewriteCond %{THE_REQUEST} \s/+([^?\s]*)(?:\?[^\s]*)?\s
+RewriteRule ^ https://indexindex.net/%1 [R=301,L,NE]
