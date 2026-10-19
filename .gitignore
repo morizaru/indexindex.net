@@ -1,0 +1,25 @@
+﻿# DB接続情報・環境設定
+config.php
+app/config.php
+includes/config.php
+.env
+
+# アップロードデータ
+uploads/
+
+# バックアップ・DBダンプ
+*.sql
+*.sql.gz
+*.zip
+
+# OS/エディタ
+.DS_Store
+Thumbs.db
+.vscode/
+
+# ローカル作業・検証ファイル
+NDL.html
+kariru_renkei.html
+test.php
+test10.html
+スクリーンショット *.png
