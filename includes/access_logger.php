@@ -115,7 +115,7 @@ if (!function_exists('ii_access_log')) {
         $isBot = ii_access_is_bot($ua) ? 1 : 0;
 
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $host = $_SERVER['HTTP_HOST'] ?? 'morizaru.net';
+        $host = $_SERVER['HTTP_HOST'] ?? 'indexindex.net';
         $fullUrl = $scheme . '://' . $host . $requestUri;
         $queryString = $_SERVER['QUERY_STRING'] ?? '';
 
